@@ -5,6 +5,9 @@ import { Icon, WaveArt } from '../ui/Icon'
 
 const EMAIL_KEY = 'login-email'
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const MIN_PASSWORD = 6
+
+type Mode = 'login' | 'signup'
 
 function storedEmail() {
   try {
@@ -14,109 +17,120 @@ function storedEmail() {
   }
 }
 
-function sendError(e: AuthError): string {
-  if (e.status === 429) return 'しばらく待ってから再送してください'
-  if (/signup|not allowed|not found/i.test(e.message)) return '登録されていないアドレスです'
-  return '送信できませんでした'
+function authError(e: AuthError): string {
+  if (e.status === 429) return 'しばらく待ってから試してください'
+  if (/invalid login credentials/i.test(e.message)) return 'アドレスかパスワードが違います'
+  if (/email not confirmed/i.test(e.message)) return '確認メールのリンクを開いてください'
+  if (/already registered|already exists/i.test(e.message)) return '登録済みのアドレスです'
+  if (/password/i.test(e.message)) return `パスワードは${MIN_PASSWORD}文字以上にしてください`
+  if (/signups? not allowed|disabled/i.test(e.message)) return '新規登録は受け付けていません'
+  return '処理できませんでした'
 }
 
-/** メールに届く確認コードでログイン（各端末で初回のみ） */
+/** メール + パスワード。ログイン / 新規登録（各端末で初回のみ。以降はセッションを保持） */
 export default function Login() {
+  const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState(storedEmail)
-  const [code, setCode] = useState('')
-  const [step, setStep] = useState<'email' | 'code'>('email')
-  const [error, setError] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
-  const valid = EMAIL_RE.test(email.trim())
+  const signup = mode === 'signup'
 
-  async function sendCode(e: React.FormEvent) {
-    e.preventDefault()
-    if (!valid) return setError('アドレスの形式が正しくありません')
-    setBusy(true)
-    const { error } = await supabase!.auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: false },
-    })
-    setBusy(false)
-    if (error) return setError(sendError(error))
-    setError('')
+  function remember() {
     try {
       localStorage.setItem(EMAIL_KEY, email.trim())
     } catch {
       // 保存できなくても続行
     }
-    setStep('code')
   }
 
-  async function verify(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
+    if (!EMAIL_RE.test(email.trim())) return setMessage('アドレスの形式が正しくありません')
+    if (signup) {
+      if (password.length < MIN_PASSWORD) return setMessage(`パスワードは${MIN_PASSWORD}文字以上にしてください`)
+      if (password !== confirm) return setMessage('パスワードが一致しません')
+    }
     setBusy(true)
-    const { error } = await supabase!.auth.verifyOtp({ email: email.trim(), token: code, type: 'email' })
+    if (signup) {
+      const { data, error } = await supabase!.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { emailRedirectTo: window.location.origin },
+      })
+      setBusy(false)
+      if (error) return setMessage(authError(error))
+      remember()
+      // 確認メールが有効な設定ではセッションが返らない
+      if (!data.session) {
+        setMode('login')
+        setConfirm('')
+        setMessage('確認メールを送りました。リンクを開いてからログインしてください')
+      }
+      return
+    }
+    const { error } = await supabase!.auth.signInWithPassword({ email: email.trim(), password })
     setBusy(false)
-    setError(error ? 'コードが正しくありません' : '')
+    if (error) return setMessage(authError(error))
+    remember()
+  }
+
+  function switchMode() {
+    setMode(signup ? 'login' : 'signup')
+    setPassword('')
+    setConfirm('')
+    setMessage('')
   }
 
   const field = 'h-14 w-full rounded-2xl bg-panel px-5 text-center placeholder:text-faint'
-  const submit = (disabled: boolean) => (
-    <button
-      disabled={disabled}
-      aria-label="次へ"
-      className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-fg text-bg transition active:scale-95 disabled:bg-chip disabled:text-faint"
-    >
-      <Icon name="arrow" />
-    </button>
-  )
+  const change = (set: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    set(e.target.value)
+    setMessage('')
+  }
 
   return (
     <div className="safe-top flex min-h-full flex-col items-center justify-center px-8 pb-[env(safe-area-inset-bottom)]">
       <WaveArt className="mb-10 h-44 w-auto text-fg" intensity={0.8} />
-      {step === 'email' ? (
-        <form onSubmit={sendCode} className="flex w-full max-w-xs flex-col gap-5" noValidate>
+      <form onSubmit={submit} className="flex w-full max-w-xs flex-col gap-3" noValidate>
+        <input
+          type="email"
+          autoComplete={signup ? 'email' : 'username'}
+          placeholder="email"
+          value={email}
+          onChange={change(setEmail)}
+          className={field}
+        />
+        <input
+          type="password"
+          autoComplete={signup ? 'new-password' : 'current-password'}
+          placeholder="password"
+          value={password}
+          onChange={change(setPassword)}
+          className={field}
+        />
+        {signup && (
           <input
-            type="email"
-            autoComplete="email"
-            placeholder="email"
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value)
-              setError('')
-            }}
+            type="password"
+            autoComplete="new-password"
+            placeholder="password（確認）"
+            value={confirm}
+            onChange={change(setConfirm)}
             className={field}
           />
-          {submit(busy || !email.trim())}
-        </form>
-      ) : (
-        <form onSubmit={verify} className="flex w-full max-w-xs flex-col gap-5">
-          <p className="truncate text-center text-sm text-dim">{email}</p>
-          <input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]*"
-            maxLength={8}
-            placeholder="000000"
-            value={code}
-            onChange={(e) => {
-              setCode(e.target.value.replace(/\D/g, ''))
-              setError('')
-            }}
-            autoFocus
-            className={`${field} text-2xl tracking-[0.4em]`}
-          />
-          {submit(busy || code.length < 6)}
-          <button
-            type="button"
-            onClick={() => {
-              setStep('email')
-              setCode('')
-              setError('')
-            }}
-            className="mx-auto h-11 px-4 text-sm text-dim"
-          >
-            アドレスを変更
-          </button>
-        </form>
-      )}
-      <p className="mt-4 h-5 text-center text-sm text-dim">{error}</p>
+        )}
+        <button
+          disabled={busy || !email.trim() || !password || (signup && !confirm)}
+          aria-label={signup ? '登録' : 'ログイン'}
+          className="mx-auto mt-2 flex h-14 w-14 items-center justify-center rounded-full bg-fg text-bg transition active:scale-95 disabled:bg-chip disabled:text-faint"
+        >
+          <Icon name="arrow" />
+        </button>
+      </form>
+      <p className="mt-4 min-h-5 max-w-xs text-center text-sm leading-5 text-dim">{message}</p>
+      <button type="button" onClick={switchMode} className="mt-4 h-11 px-4 text-sm text-dim active:text-fg">
+        {signup ? 'ログインに戻る' : '新規登録'}
+      </button>
     </div>
   )
 }

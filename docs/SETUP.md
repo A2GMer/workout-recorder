@@ -11,18 +11,12 @@ npm run dev
 ## 1. Supabase プロジェクトを作る
 1. https://supabase.com にログインし **New project**（リージョンは Tokyo 推奨）
 2. **SQL Editor** を開き、`supabase/migrations/0001_init.sql` の中身を貼り付けて **Run**
-3. **Authentication > Sign In / Providers**
-   - Email を有効のまま、**Allow new users to sign up を OFF**（他人が登録できないように）
-4. **Authentication > Users > Add user > Create new user**
-   - 自分のメールを入力（パスワードは任意の値でOK。ログインには使わない）、**Auto Confirm User を ON**
-5. **Authentication > Emails > Templates > Magic Link** の本文を、確認コードが載るように変更して保存
-   ```html
-   <h2>ログインコード</h2>
-   <p style="font-size:28px;font-weight:bold;letter-spacing:4px">{{ .Token }}</p>
-   ```
-   - ログインはメールに届く確認コード方式。各端末で最初の1回だけ入力し、以降は自動ログイン
-   - 標準のメール送信は1時間あたりの送信数に制限がある（個人利用なら問題なし）
-6. **Project Settings > API**（または **Connect**）で次の2つを控える
+3. **Authentication > Sign In / Providers > Email**
+   - **Allow new users to sign up を ON**（アプリの「新規登録」から登録するため）
+   - **Confirm email を OFF**（登録後すぐログインできる。ON だと確認メールが必要で、送信数の制限にもかかる）
+   - 自分の登録が済んだら、他人に登録されないよう **Allow new users to sign up を OFF** に戻してもよい
+   - ログインは各端末で最初の1回だけ。以降は自動ログイン
+4. **Project Settings > API**（または **Connect**）で次の2つを控える
    - Project URL
    - anon / publishable key（`service_role` / secret key は使わない・共有しない）
 
