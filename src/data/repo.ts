@@ -1,6 +1,7 @@
 import { db, SETTINGS_ID, type SyncTable } from './db'
 import { scheduleSync } from './sync'
 import type {
+  BodyPart,
   Exercise,
   Routine,
   RoutineItem,
@@ -10,7 +11,7 @@ import type {
   Synced,
   WorkSet,
 } from '../lib/types'
-import type { PrevPerformance } from '../lib/progression'
+import { challenge, type PrevPerformance } from '../lib/progression'
 
 export const uuid = () => crypto.randomUUID()
 
@@ -157,6 +158,38 @@ export async function startSession(routineId: string): Promise<string> {
   await save('sessions', session)
   if (ses.length) await save('session_exercises', ses)
   return session.id
+}
+
+export interface RoutineProfile {
+  /** 多い順に最大2部位 */
+  parts: BodyPart[]
+  /** 次回提案の挑戦度 0〜1 */
+  intensity: number
+}
+
+/** メニューの模様を決める: 含まれる種目の部位と、次回提案の挑戦度の平均 */
+export async function routineProfile(routineId: string): Promise<RoutineProfile> {
+  const byId = new Map((await listExercises()).map((e) => [e.id, e]))
+  const exercises = (await routineItems(routineId))
+    .map((it) => byId.get(it.exercise_id))
+    .filter((e): e is Exercise => !!e)
+  const freq = new Map<BodyPart, number>()
+  for (const e of exercises) if (e.body_part) freq.set(e.body_part, (freq.get(e.body_part) ?? 0) + 1)
+  const parts = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([p]) => p)
+
+  // 「今これから行う」想定のセッションを基準に前回を探す
+  const now: Session = {
+    id: '',
+    routine_id: routineId,
+    date: localDate(),
+    body_weight_kg: 0,
+    created_at: new Date().toISOString(),
+  }
+  const scores = await Promise.all(
+    exercises.map(async (e) => challenge(e, (await previousPerformance(e.id, now))?.prev ?? null)),
+  )
+  const intensity = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0.3
+  return { parts, intensity }
 }
 
 export async function lastSessionOf(routineId: string): Promise<Session | undefined> {

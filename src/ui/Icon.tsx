@@ -35,60 +35,6 @@ export function Icon({ name, size = 22, className }: { name: IconName; size?: nu
   )
 }
 
-/** メニューごとの線画アイコン（円の中に模様） */
-export function Glyph({ index, size = 56 }: { index: number; size?: number }) {
-  const c = 24
-  const r = 20
-  const patterns = [
-    // 格子
-    <g key="g">
-      {[-12, -6, 0, 6, 12].map((d) => (
-        <path key={`v${d}`} d={`M${c + d} ${c - Math.sqrt(r * r - d * d)}V${c + Math.sqrt(r * r - d * d)}`} />
-      ))}
-      {[-12, -6, 0, 6, 12].map((d) => (
-        <path key={`h${d}`} d={`M${c - Math.sqrt(r * r - d * d)} ${c + d}H${c + Math.sqrt(r * r - d * d)}`} />
-      ))}
-    </g>,
-    // 波
-    <g key="w">
-      <path d="M4 20c5-6 10-6 20 0s15 6 20 0" />
-      <path d="M4 28c5 6 10 6 20 0s15-6 20 0" />
-      <path d="M8 13c5 4 11 4 16 0s11-4 16 0" />
-      <path d="M8 35c5-4 11-4 16 0s11 4 16 0" />
-    </g>,
-    // 同心円
-    <g key="c">
-      <circle cx={c} cy={c} r={14} />
-      <circle cx={c} cy={c} r={8} />
-      <circle cx={c} cy={c} r={2.5} />
-    </g>,
-    // 放射
-    <g key="r">
-      {Array.from({ length: 9 }, (_, i) => {
-        const a = Math.PI * (1 + i / 8)
-        return <path key={i} d={`M${c} ${c + 10}L${c + 18 * Math.cos(a)} ${c + 10 + 18 * Math.sin(a)}`} />
-      })}
-    </g>,
-    // 斜線
-    <g key="d">
-      {[-16, -8, 0, 8, 16].map((d) => (
-        <path key={d} d={`M${c - 14 + d} ${c + 14}L${c + 14 + d} ${c - 14}`} />
-      ))}
-    </g>,
-  ]
-  return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={1} aria-hidden="true">
-      <defs>
-        <clipPath id={`gc${index}`}>
-          <circle cx={c} cy={c} r={r} />
-        </clipPath>
-      </defs>
-      <circle cx={c} cy={c} r={r} />
-      <g clipPath={`url(#gc${index})`}>{patterns[index % patterns.length]}</g>
-    </svg>
-  )
-}
-
 /** 中央の線画。ゆっくり揺れる正弦波の束 */
 export function WaveArt({ className, intensity = 1 }: { className?: string; intensity?: number }) {
   const ref = useRef<SVGSVGElement>(null)

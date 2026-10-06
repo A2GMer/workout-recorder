@@ -1,16 +1,24 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate } from 'react-router-dom'
-import { lastSessionOf, listRoutines, localDate, startSession } from '../data/repo'
+import { lastSessionOf, listRoutines, localDate, routineProfile, startSession } from '../data/repo'
 import { md } from '../lib/format'
-import { Glyph, Icon, WaveArt } from '../ui/Icon'
+import { BodyArt } from '../ui/BodyArt'
+import { Icon } from '../ui/Icon'
 import { IconButton, TopBar } from '../ui/TopBar'
 
 export default function Home() {
   const nav = useNavigate()
   const routines = useLiveQuery(async () => {
     const rs = await listRoutines()
-    return Promise.all(rs.map(async (r) => ({ ...r, last: await lastSessionOf(r.id) })))
+    return Promise.all(
+      rs.map(async (r) => ({ ...r, last: await lastSessionOf(r.id), profile: await routineProfile(r.id) })),
+    )
   })
+
+  // 次にやるメニュー = 未実施、または最後に行ってから一番時間が空いているもの
+  const next = routines?.length
+    ? [...routines].sort((a, b) => (a.last?.date ?? '') .localeCompare(b.last?.date ?? '') || a.sort_order - b.sort_order)[0]
+    : undefined
 
   async function start(id: string) {
     nav(`/s/${await startSession(id)}`)
@@ -33,18 +41,35 @@ export default function Home() {
         }
       />
 
-      <div className="flex min-h-0 flex-1 items-center justify-center py-6">
-        <WaveArt className="h-full max-h-[440px] w-auto text-fg" />
-      </div>
+      <button
+        onClick={() => next && start(next.id)}
+        disabled={!next}
+        aria-label={next ? `${next.name}を開始` : undefined}
+        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-8 py-6"
+      >
+        <BodyArt
+          parts={next?.profile.parts ?? []}
+          intensity={next?.profile.intensity ?? 0.2}
+          className="aspect-square max-h-[340px] min-h-0 w-full max-w-[340px] flex-1 text-fg"
+        />
+        {next && (
+          <span className="flex flex-col items-center gap-1">
+            <span className="text-[11px] tracking-[0.2em] text-dim">NEXT</span>
+            <span className="text-lg">{next.name}</span>
+          </span>
+        )}
+      </button>
 
       <nav className="no-scrollbar flex shrink-0 snap-x gap-2 overflow-x-auto px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+2rem)]">
-        {routines?.map((r, i) => (
+        {routines?.map((r) => (
           <button
             key={r.id}
             onClick={() => start(r.id)}
-            className="flex w-[84px] shrink-0 snap-center first:ml-auto last:mr-auto flex-col items-center gap-2 text-dim transition active:text-fg"
+            className={`flex w-[84px] shrink-0 snap-center flex-col items-center gap-2 transition first:ml-auto last:mr-auto active:text-fg ${
+              r.id === next?.id ? 'text-fg' : 'text-dim'
+            }`}
           >
-            <Glyph index={i} size={56} />
+            <BodyArt parts={r.profile.parts} intensity={r.profile.intensity} detail={0.55} clip className="h-14 w-14" />
             <span className="w-full truncate text-center text-[13px] leading-4 text-fg">{r.name}</span>
             <span className="h-3 text-[11px] leading-3 text-faint">{r.last ? md(r.last.date) : ''}</span>
           </button>

@@ -1,5 +1,15 @@
 export type Equipment = 'barbell' | 'ez' | 'dumbbell' | 'machine' | 'bodyweight'
 export type SetKind = 'main' | 'backoff'
+export type BodyPart = 'chest' | 'back' | 'shoulders' | 'arms' | 'legs' | 'core'
+
+export const BODY_PART_LABEL: Record<BodyPart, string> = {
+  chest: '胸',
+  back: '背中',
+  shoulders: '肩',
+  arms: '腕',
+  legs: '脚',
+  core: '腹',
+}
 
 /** 同期対象の行に共通するカラム */
 export interface Synced {
@@ -16,6 +26,7 @@ export interface Settings extends Synced {
 export interface Exercise extends Synced {
   name: string
   equipment: Equipment
+  body_part?: BodyPart | null
   weight_step: number
   target_reps: number
   main_sets: number

@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { getSettings, listExercises, listRoutines, patch, remove, routineItems, save, uuid } from '../data/repo'
 import { supabase } from '../data/supabase'
-import { EQUIPMENT_LABEL, type Equipment, type Exercise, type Routine, type RoutineItem, type Settings } from '../lib/types'
+import { BODY_PART_LABEL, EQUIPMENT_LABEL, type BodyPart, type Equipment, type Exercise, type Routine, type RoutineItem, type Settings } from '../lib/types'
 import { Icon } from '../ui/Icon'
+import { BodyArt } from '../ui/BodyArt'
 import { TopBar } from '../ui/TopBar'
 
 const inputCls = 'h-11 rounded-xl bg-chip px-4 placeholder:text-faint'
@@ -103,6 +104,7 @@ export default function SettingsPage() {
       id: uuid(),
       name: `種目${exercises.length + 1}`,
       equipment: 'barbell',
+      body_part: null,
       weight_step: 2.5,
       target_reps: 3,
       main_sets: 5,
@@ -180,14 +182,30 @@ function ExerciseEditor({ ex, open, toggle }: { ex: Exercise; open: boolean; tog
     <div className="rounded-2xl bg-panel">
       <Row
         title={ex.name}
-        meta={`${EQUIPMENT_LABEL[ex.equipment]}  ${ex.target_reps}×${ex.main_sets}${ex.pyramid ? '+B' : ''}`}
+        meta={`${ex.body_part ? BODY_PART_LABEL[ex.body_part] + '  ' : ''}${EQUIPMENT_LABEL[ex.equipment]}  ${ex.target_reps}×${ex.main_sets}${ex.pyramid ? '+B' : ''}`}
         open={open}
         toggle={toggle}
       />
       {open && (
         <div className="flex flex-col border-t border-line px-5 pt-4 pb-3">
           <TextField value={ex.name} onCommit={(v) => v.trim() && set({ name: v.trim() })} />
-          <div className="mt-3 mb-2 grid grid-cols-5 gap-1 rounded-xl bg-chip p-1">
+          <div className="mt-3 grid grid-cols-6 gap-1 rounded-xl bg-chip p-1">
+            {(Object.keys(BODY_PART_LABEL) as BodyPart[]).map((bp) => {
+              const on = ex.body_part === bp
+              return (
+                <button
+                  key={bp}
+                  onClick={() => set({ body_part: on ? null : bp })}
+                  aria-pressed={on}
+                  className={`flex h-14 flex-col items-center justify-center gap-1 rounded-xl transition ${on ? 'bg-fg text-bg' : 'text-dim'}`}
+                >
+                  <BodyArt parts={[bp]} intensity={0} detail={0.6} animate={false} className="h-6 w-6" />
+                  <span className="text-[11px] leading-none">{BODY_PART_LABEL[bp]}</span>
+                </button>
+              )
+            })}
+          </div>
+          <div className="mt-1 mb-2 grid grid-cols-5 gap-1 rounded-xl bg-chip p-1">
             {(Object.keys(EQUIPMENT_LABEL) as Equipment[]).map((eq) => (
               <button
                 key={eq}

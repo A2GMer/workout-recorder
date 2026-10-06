@@ -93,6 +93,17 @@ export function suggest(ex: Exercise, prev: PrevPerformance | null): Suggestion 
   return { mainWeight: maxW, mainReps: reps, prevVolume, achieved, increase: 0 }
 }
 
+/**
+ * 次回提案の挑戦度 (0〜1)。模様の激しさに使う。
+ * 増量幅が大きいほど高い: 軽(+3刻み) > 普(+2刻み) > 重(+1刻み) > 未達の再挑戦(+1回) > 初回
+ */
+export function challenge(ex: Exercise, prev: PrevPerformance | null): number {
+  if (!prev || prev.main.length === 0) return 0.2
+  const s = suggest(ex, prev)
+  if (!s.achieved) return 0.35
+  return { light: 1, normal: 0.75, heavy: 0.55 }[fatigueLevel(prev.fatigue)]
+}
+
 /** バックオフ重量（記録する重量の単位で返す。自重は加重分） */
 export function backoffWeight(ex: Exercise, mainWeight: number, ctx: Ctx): number {
   if (ex.equipment === 'bodyweight') {

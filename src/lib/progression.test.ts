@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   backoffWeight,
+  challenge,
   neededBackoffReps,
   roundToStep,
   suggest,
@@ -85,6 +86,21 @@ describe('suggest', () => {
     const s = suggest(pullup, prev({ main: sets(-10, 3, 3, 3, 3, 3), body_weight_kg: 70 }))
     expect(s.prevVolume).toBe(60 * 15)
     expect(s.mainWeight).toBe(-5) // 補助を 5kg 減らす
+  })
+})
+
+describe('challenge', () => {
+  const main = sets(100, 3, 3, 3, 3, 3)
+  it('増量幅が大きいほど高い', () => {
+    const light = challenge(bench, prev({ main, fatigue: 10 }))
+    const normal = challenge(bench, prev({ main, fatigue: 50 }))
+    const heavy = challenge(bench, prev({ main, fatigue: 90 }))
+    const retry = challenge(bench, prev({ main: sets(100, 3, 3, 3, 2, 2) }))
+    const first = challenge(bench, null)
+    expect(light).toBeGreaterThan(normal)
+    expect(normal).toBeGreaterThan(heavy)
+    expect(heavy).toBeGreaterThan(retry)
+    expect(retry).toBeGreaterThan(first)
   })
 })
 
