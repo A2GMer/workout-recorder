@@ -29,14 +29,14 @@ export default function History() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <TopBar back="/" />
-      <main className="flex flex-col gap-2 px-5 pt-2 pb-[calc(env(safe-area-inset-bottom)+2.5rem)]">
+      <TopBar back="/" title="履歴" />
+      <main className="flex flex-col px-5 pt-2 pb-[calc(env(safe-area-inset-bottom)+2.5rem)]">
         {rows?.map(({ s, total, count, name }) => (
-          <div key={s.id} className="glass flex h-16 items-center rounded-[22px]">
-            <Link to={`/s/${s.id}`} className="flex h-full min-w-0 flex-1 items-center gap-4 pl-5">
+          <div key={s.id} className="flex h-16 items-center border-b border-line">
+            <Link to={`/s/${s.id}`} className="flex h-full min-w-0 flex-1 items-center gap-4">
               <span className="w-11 shrink-0 text-sm text-faint">{md(s.date)}</span>
-              <span className="min-w-0 flex-1 truncate font-light">{name ?? '—'}</span>
-              <span className="shrink-0 text-lg font-light">{count ? fmtVolume(total) : ''}</span>
+              <span className="min-w-0 flex-1 truncate">{name ?? '—'}</span>
+              <span className="shrink-0 text-lg">{count ? fmtVolume(total) : ''}</span>
             </Link>
             <button
               onClick={() => confirm(`${md(s.date)} ${name ?? ''} 削除？`) && remove('sessions', s.id)}

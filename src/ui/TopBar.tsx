@@ -4,14 +4,14 @@ import { useSyncStatus } from '../data/sync'
 import { supabase } from '../data/supabase'
 import { Icon } from './Icon'
 
+/** 未送信があるときだけ右上に小さな点を出す */
 export function SyncDot() {
   const { pending, syncing, error } = useSyncStatus()
-  if (!supabase) return null
-  const color = error ? 'bg-down' : pending > 0 ? 'bg-warm' : 'bg-faint'
+  if (!supabase || (!pending && !error)) return null
   return (
     <span
-      aria-label={pending > 0 ? `未送信 ${pending}` : '同期済み'}
-      className={`mx-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${color} ${syncing ? 'animate-pulse' : ''}`}
+      aria-label={error ? '同期エラー' : `未送信 ${pending}`}
+      className={`absolute top-2 right-2 h-1.5 w-1.5 rounded-full ${error ? 'bg-dim' : 'bg-fg'} ${syncing ? 'animate-pulse' : ''}`}
     />
   )
 }
@@ -21,27 +21,31 @@ export function IconButton({ children, label, onClick }: { children: ReactNode; 
     <button
       onClick={onClick}
       aria-label={label}
-      className="flex h-11 w-11 items-center justify-center rounded-full text-dim transition active:bg-panel active:text-fg"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-dim transition active:text-fg"
     >
       {children}
     </button>
   )
 }
 
-export function TopBar({ title, back, right }: { title?: ReactNode; back?: string; right?: ReactNode }) {
+/** 左: 戻る / 中央: タイトル / 右: 任意（左右は同じ幅にして中央を揃える） */
+export function TopBar({ title, sub, back, right, side = 64 }: { title?: ReactNode; sub?: ReactNode; back?: string; right?: ReactNode; side?: number }) {
   const nav = useNavigate()
   return (
-    <header className="safe-top sticky top-0 z-10 bg-bg/40 backdrop-blur-xl">
-      <div className="flex h-14 items-center gap-1 px-2">
-        {back !== undefined ? (
-          <IconButton label="戻る" onClick={() => nav(back)}>
-            <Icon name="back" />
-          </IconButton>
-        ) : (
-          <span className="w-2" />
-        )}
-        <div className="min-w-0 flex-1 truncate text-[15px] font-medium tracking-wide text-dim">{title}</div>
-        {right}
+    <header className="safe-top sticky top-0 z-10 bg-bg">
+      <div className="relative flex h-14 items-center px-2">
+        <div className="flex shrink-0 items-center" style={{ width: side }}>
+          {back !== undefined && (
+            <IconButton label="戻る" onClick={() => nav(back)}>
+              <Icon name="back" />
+            </IconButton>
+          )}
+        </div>
+        <div className="min-w-0 flex-1 text-center">
+          {title && <div className="truncate text-[15px] leading-5">{title}</div>}
+          {sub && <div className="truncate text-xs leading-4 text-dim">{sub}</div>}
+        </div>
+        <div className="flex shrink-0 items-center justify-end" style={{ width: side }}>{right}</div>
         <SyncDot />
       </div>
     </header>

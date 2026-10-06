@@ -6,7 +6,7 @@ import { EQUIPMENT_LABEL, type Equipment, type Exercise, type Routine, type Rout
 import { Icon } from '../ui/Icon'
 import { TopBar } from '../ui/TopBar'
 
-const inputCls = 'h-11 rounded-2xl bg-white/[0.06] px-4 font-light placeholder:text-faint'
+const inputCls = 'h-11 rounded-xl bg-chip px-4 placeholder:text-faint'
 
 /** フォーカスが外れた時だけ保存する入力欄 */
 function TextField({ value, onCommit, className, ...rest }: {
@@ -56,8 +56,8 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   return (
     <button onClick={() => onChange(!checked)} className="flex h-12 items-center justify-between" role="switch" aria-checked={checked}>
       <span className="text-sm text-dim">{label}</span>
-      <span className={`mr-8 flex h-7 w-12 items-center rounded-full p-1 transition ${checked ? 'grad' : 'bg-line'}`}>
-        <span className={`h-5 w-5 rounded-full bg-white transition ${checked ? 'translate-x-5' : ''}`} />
+      <span className={`mr-8 flex h-7 w-12 items-center rounded-full p-1 transition ${checked ? 'bg-fg' : 'bg-line'}`}>
+        <span className={`h-5 w-5 rounded-full transition ${checked ? 'bg-bg' : 'bg-dim'} ${checked ? 'translate-x-5' : ''}`} />
       </span>
     </button>
   )
@@ -65,7 +65,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <section className="flex flex-col gap-2">
-    <h2 className="px-2 text-[11px] tracking-[0.2em] text-faint">{title}</h2>
+    <h2 className="px-2 text-[11px] tracking-[0.2em] text-dim">{title}</h2>
     {children}
   </section>
 )
@@ -74,7 +74,7 @@ const AddButton = ({ onClick, label }: { onClick: () => void; label: string }) =
   <button
     onClick={onClick}
     aria-label={label}
-    className="flex h-14 items-center justify-center rounded-[22px] border border-dashed border-line text-faint active:bg-panel"
+    className="flex h-14 items-center justify-center rounded-2xl border border-dashed border-line text-faint active:text-fg"
   >
     <Icon name="plus" />
   </button>
@@ -117,10 +117,10 @@ export default function SettingsPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <TopBar back="/" />
+      <TopBar back="/" title="設定" />
       <main className="flex flex-col gap-8 px-5 pt-2 pb-[calc(env(safe-area-inset-bottom)+4rem)]">
         <Section title="BODY">
-          <div className="glass flex flex-col rounded-[22px] px-5 py-1">
+          <div className="flex flex-col rounded-2xl bg-panel px-5 py-1">
             <NumField label="体重" unit="kg" value={settings.body_weight_kg} onCommit={(v) => saveSettings({ body_weight_kg: v })} />
             <NumField label="EZバー" unit="kg" value={settings.ez_bar_kg} onCommit={(v) => saveSettings({ ez_bar_kg: v })} />
           </div>
@@ -159,7 +159,7 @@ export default function SettingsPage() {
 function Row({ title, meta, open, toggle }: { title: string; meta: React.ReactNode; open: boolean; toggle: () => void }) {
   return (
     <button onClick={toggle} className="flex h-16 w-full items-center gap-3 px-5 text-left">
-      <span className="min-w-0 flex-1 truncate font-light">{title}</span>
+      <span className="min-w-0 flex-1 truncate">{title}</span>
       <span className="shrink-0 text-xs text-faint">{meta}</span>
       <Icon name={open ? 'up' : 'down'} size={18} className="shrink-0 text-faint" />
     </button>
@@ -168,7 +168,7 @@ function Row({ title, meta, open, toggle }: { title: string; meta: React.ReactNo
 
 function DeleteButton({ onClick }: { onClick: () => void }) {
   return (
-    <button onClick={onClick} className="mt-2 h-10 self-end px-2 text-xs text-down/80">
+    <button onClick={onClick} className="mt-2 h-10 self-end px-2 text-xs text-dim">
       削除
     </button>
   )
@@ -177,7 +177,7 @@ function DeleteButton({ onClick }: { onClick: () => void }) {
 function ExerciseEditor({ ex, open, toggle }: { ex: Exercise; open: boolean; toggle: () => void }) {
   const set = (c: Partial<Exercise>) => patch<Exercise>('exercises', ex.id, c)
   return (
-    <div className="glass rounded-[22px]">
+    <div className="rounded-2xl bg-panel">
       <Row
         title={ex.name}
         meta={`${EQUIPMENT_LABEL[ex.equipment]}  ${ex.target_reps}×${ex.main_sets}${ex.pyramid ? '+B' : ''}`}
@@ -187,12 +187,12 @@ function ExerciseEditor({ ex, open, toggle }: { ex: Exercise; open: boolean; tog
       {open && (
         <div className="flex flex-col border-t border-line px-5 pt-4 pb-3">
           <TextField value={ex.name} onCommit={(v) => v.trim() && set({ name: v.trim() })} />
-          <div className="mt-3 mb-2 grid grid-cols-5 gap-1 rounded-2xl bg-white/[0.04] p-1">
+          <div className="mt-3 mb-2 grid grid-cols-5 gap-1 rounded-xl bg-chip p-1">
             {(Object.keys(EQUIPMENT_LABEL) as Equipment[]).map((eq) => (
               <button
                 key={eq}
                 onClick={() => set({ equipment: eq })}
-                className={`h-10 rounded-xl text-[11px] transition ${ex.equipment === eq ? 'bg-white/15 text-fg' : 'text-faint'}`}
+                className={`h-10 rounded-xl text-[11px] transition ${ex.equipment === eq ? 'bg-fg text-bg' : 'text-dim'}`}
               >
                 {EQUIPMENT_LABEL[eq]}
               </button>
@@ -251,13 +251,13 @@ function RoutineEditor({ routine, exercises, open, toggle }: {
   const candidates = exercises.filter((e) => !shown.some((it) => it.exercise_id === e.id))
 
   return (
-    <div className="glass rounded-[22px]">
+    <div className="rounded-2xl bg-panel">
       <Row title={routine.name} meta={shown.length} open={open} toggle={toggle} />
       {open && (
         <div className="flex flex-col gap-2 border-t border-line px-5 pt-4 pb-3">
           <TextField value={routine.name} onCommit={(v) => v.trim() && patch<Routine>('routines', routine.id, { name: v.trim() })} />
           {shown.map((it, i) => (
-            <div key={it.id} className="flex h-12 items-center rounded-2xl bg-white/[0.04] pl-4">
+            <div key={it.id} className="flex h-12 items-center rounded-xl bg-chip pl-4">
               <span className="min-w-0 flex-1 truncate text-sm font-light">{byId.get(it.exercise_id)!.name}</span>
               <button onClick={() => move(i, -1)} disabled={i === 0} className="flex h-12 w-10 items-center justify-center text-faint disabled:opacity-20" aria-label="上へ">
                 <Icon name="up" size={18} />

@@ -126,6 +126,8 @@ export function ExercisePanel({
     const isW = field === 'weight'
     openEditor({
       key: `${se.id}:${row.key}:${field}`,
+      label: row.kind === 'backoff' ? 'BACK-OFF' : `SET ${row.setNo}`,
+      unit: isW ? 'kg' : field === 'reps' ? '回' : 'チート',
       value,
       step: isW ? ex.weight_step : 1,
       big: isW ? 10 : undefined,
@@ -183,38 +185,10 @@ export function ExercisePanel({
   useEffect(() => () => flush(), []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const cell = (row: Row, field: Field) =>
-    activeKey === `${se.id}:${row.key}:${field}` ? 'bg-line text-fg' : ''
+    activeKey === `${se.id}:${row.key}:${field}` ? 'bg-chip text-fg' : ''
   const progress = sugg.prevVolume ? Math.min(1, actual / sugg.prevVolume) : 0
 
-  return (
-    <section className="flex h-full w-full shrink-0 grow-0 basis-full flex-col overflow-y-auto px-5 pb-56 [scrollbar-width:none] [&>*]:shrink-0">
-      <h2 className="truncate pt-2 text-[26px] font-light tracking-tight">{ex.name}</h2>
-
-      <div className="mt-3 flex items-baseline gap-3">
-        <span className="text-4xl font-extralight tracking-tight">{fmtVolume(actual)}</span>
-        {delta !== null &&
-          (delta > 0 ? (
-            <span className="text-sm text-up">+{fmtVolume(delta)}</span>
-          ) : (
-            <span className="text-sm text-faint">/ {fmtVolume(sugg.prevVolume!)}</span>
-          ))}
-      </div>
-      {sugg.prevVolume !== null && (
-        <div className="mt-3 h-[3px] w-full overflow-hidden rounded-full bg-line">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${delta !== null && delta > 0 ? 'bg-up' : 'grad'}`}
-            style={{ width: `${progress * 100}%` }}
-          />
-        </div>
-      )}
-      {prev && (
-        <div className="mt-2 truncate text-xs text-faint">
-          {md(prev.session.date)}　{fmtSets(ex.equipment, [...prev.prev.main, ...prev.prev.backoff])}
-        </div>
-      )}
-
-      <div className="mt-6 flex flex-col gap-2">
-        {rows.map((row) => {
+  function renderRow(row: Row) {
           const recorded = !!row.rec
           const tone = recorded ? 'text-fg' : 'text-faint'
           const perSide = bar > 0 ? (row.weight - bar) / 2 : null
@@ -222,35 +196,31 @@ export function ExercisePanel({
           return (
             <div
               key={row.key}
-              className={`flex h-[68px] items-center rounded-[22px] pl-2 pr-2 transition ${
-                backoff ? 'mt-3 border border-dashed border-line' : recorded ? 'glass' : 'border border-transparent'
-              }`}
+              className={`flex h-16 items-center border-b border-line `}
             >
-              <span className="w-6 shrink-0 text-center text-[11px] tracking-widest text-faint">
-                {backoff ? 'B' : row.setNo}
-              </span>
+              <span className="w-7 shrink-0 text-xs text-faint">{backoff ? 'B' : row.setNo}</span>
               <button
                 onClick={(e) => edit(row, 'weight', e.currentTarget)}
-                className={`flex h-14 w-[96px] shrink-0 flex-col items-end justify-center rounded-2xl px-2 transition ${tone} ${cell(row, 'weight')}`}
+                className={`flex h-12 w-[92px] shrink-0 flex-col items-end justify-center rounded-xl px-2 transition ${tone} ${cell(row, 'weight')}`}
               >
-                <span className="text-[28px] leading-none font-light tracking-tight">{fmtWeight(ex.equipment, row.weight)}</span>
+                <span className="text-[26px] leading-none">{fmtWeight(ex.equipment, row.weight)}</span>
                 {perSide !== null && perSide > 0 && (
                   <span className="mt-1 text-[10px] leading-none text-faint">片 {num(perSide)}</span>
                 )}
               </button>
-              <span className="w-5 shrink-0 text-center text-sm text-faint">×</span>
+              <span className="w-6 shrink-0 text-center text-xs text-faint">×</span>
               <button
                 onClick={(e) => edit(row, 'reps', e.currentTarget)}
-                className={`flex h-14 min-w-[52px] shrink-0 items-center justify-start rounded-2xl px-2 transition ${tone} ${cell(row, 'reps')}`}
+                className={`flex h-12 min-w-12 shrink-0 items-center rounded-xl px-2 transition ${tone} ${cell(row, 'reps')}`}
               >
-                <span className="text-[28px] leading-none font-light">{row.reps}</span>
-                {!recorded && row.need ? <span className="ml-1.5 text-xs text-accent">≥{row.need}</span> : null}
+                <span className="text-[26px] leading-none">{row.reps}</span>
+                {!recorded && row.need ? <span className="ml-1.5 text-xs text-dim">≥{row.need}</span> : null}
               </button>
               <button
                 onClick={(e) => edit(row, 'cheat', e.currentTarget)}
                 aria-label="チーティング回数"
-                className={`ml-auto flex h-11 min-w-11 shrink-0 items-center justify-center rounded-full px-2 text-xs transition ${
-                  row.cheat > 0 ? 'text-warm' : 'text-faint/60'
+                className={`ml-auto flex h-11 min-w-11 shrink-0 items-center justify-center rounded-xl px-2 text-xs transition ${
+                  row.cheat > 0 ? 'text-fg' : 'text-faint'
                 } ${cell(row, 'cheat')}`}
               >
                 C{row.cheat}
@@ -258,26 +228,59 @@ export function ExercisePanel({
               <button
                 onClick={() => toggle(row)}
                 aria-label={recorded ? '記録取消' : '記録'}
-                className={`ml-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition active:scale-90 ${
-                  recorded ? 'grad text-bg shadow-[0_0_24px_rgb(169_155_255/0.55)]' : 'border border-line text-faint'
+                className={`ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition active:scale-90 ${
+                  recorded ? 'bg-fg text-bg' : 'border border-faint text-faint'
                 }`}
               >
-                <Icon name="check" />
+                <Icon name="check" size={20} />
               </button>
             </div>
           )
-        })}
+  }
+
+  return (
+    <section className="no-scrollbar flex h-full w-full shrink-0 grow-0 basis-full flex-col overflow-y-auto px-5 pb-64 [&>*]:shrink-0">
+      {/* ボリューム */}
+      <div className="flex flex-col items-center pt-4">
+        <span className="text-[56px] leading-none tracking-tight">{fmtVolume(actual)}</span>
+        <span className="mt-2 h-4 text-xs leading-4 text-dim">
+          {delta === null ? '' : delta > 0 ? `+${fmtVolume(delta)}` : `/ ${fmtVolume(sugg.prevVolume!)}`}
+        </span>
+        {sugg.prevVolume !== null && (
+          <div className="mt-4 h-px w-40 bg-line">
+            <div className="h-px bg-fg transition-all duration-500" style={{ width: `${progress * 100}%` }} />
+          </div>
+        )}
+        <p className="mt-4 text-center text-xs leading-5 text-dim">
+          {prev
+            ? `${md(prev.session.date)}　${fmtSets(ex.equipment, [...prev.prev.main, ...prev.prev.backoff])}`
+            : '初回'}
+        </p>
+      </div>
+
+      {/* セット */}
+      <div className="mt-8 flex flex-col">
+        {rows.filter((r) => r.kind === 'main').map(renderRow)}
         <button
           onClick={() => setExtra((n) => n + 1)}
           aria-label="セット追加"
-          className="mx-auto mt-1 flex h-11 w-11 items-center justify-center rounded-full text-faint active:bg-panel"
+          className="mx-auto mt-2 flex h-11 w-11 items-center justify-center rounded-full text-faint active:text-fg"
         >
           <Icon name="plus" />
         </button>
+        {rows.some((r) => r.kind === 'backoff') && (
+          <>
+            <span className="mt-6 border-b border-line pb-2 text-[11px] tracking-[0.15em] text-dim">
+              BACK-OFF {Math.round(ex.backoff_ratio * 100)}%
+            </span>
+            {rows.filter((r) => r.kind === 'backoff').map(renderRow)}
+          </>
+        )}
       </div>
 
+      {/* 疲労度 */}
       <div className="mt-8 flex items-center gap-4">
-        <span className="text-[11px] tracking-widest text-faint">軽</span>
+        <span className="text-xs text-dim">軽</span>
         <input
           type="range"
           min={0}
@@ -287,12 +290,14 @@ export function ExercisePanel({
             setFatigue(Number(e.target.value))
             later()
           }}
+          style={{ '--p': `${fatigue}%` } as React.CSSProperties}
           className="gauge flex-1"
           aria-label="疲労度"
         />
-        <span className="text-[11px] tracking-widest text-faint">重</span>
+        <span className="text-xs text-dim">重</span>
       </div>
 
+      {/* コメント */}
       <div className="mt-8">
         {showComment ? (
           <textarea
@@ -303,13 +308,13 @@ export function ExercisePanel({
             }}
             onBlur={flush}
             rows={3}
-            className="glass w-full resize-none rounded-[22px] p-4 text-sm leading-relaxed"
+            className="w-full resize-none rounded-2xl bg-panel p-4 text-sm leading-relaxed"
           />
         ) : (
           <button
             onClick={() => setShowComment(true)}
             aria-label="コメント"
-            className="mx-auto flex h-11 w-11 items-center justify-center rounded-full text-faint active:bg-panel"
+            className="mx-auto flex h-11 w-11 items-center justify-center rounded-full text-faint active:text-fg"
           >
             <Icon name="comment" />
           </button>

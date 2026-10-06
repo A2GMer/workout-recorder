@@ -59,6 +59,8 @@ export default function SessionPage() {
   function editBodyWeight() {
     setEditor({
       key: 'bw',
+      label: 'BODY',
+      unit: 'kg',
       value: session.body_weight_kg,
       step: 0.1,
       big: 1,
@@ -86,16 +88,22 @@ export default function SessionPage() {
   }
 
   const total = panels.length + 1
+  const current = panels[page]
+  const title = current ? current.ex.name : '種目を追加'
+  const sub = current
+    ? `${current.ex.target_reps}回 × ${current.ex.main_sets}${current.ex.pyramid ? ' + B' : ''}`
+    : md(session.date)
 
   return (
     <div className="flex h-full flex-col">
       <TopBar
         back="/"
-        title={md(session.date)}
+        title={title}
+        sub={sub}
         right={
           <button
             onClick={editBodyWeight}
-            className={`h-11 rounded-full px-3 text-sm transition ${editor?.key === 'bw' ? 'bg-line text-fg' : 'text-dim'}`}
+            className={`h-11 rounded-xl px-2 text-sm transition ${editor?.key === 'bw' ? 'bg-chip text-fg' : 'text-dim'}`}
             aria-label="体重"
           >
             {num(session.body_weight_kg)}
@@ -103,20 +111,6 @@ export default function SessionPage() {
           </button>
         }
       />
-      <div className="flex justify-center">
-        {Array.from({ length: total }, (_, i) => (
-          <button
-            key={i}
-            onClick={() => goTo(i)}
-            aria-label={`${i + 1}`}
-            className="flex h-8 w-7 items-center justify-center"
-          >
-            <span
-              className={`block h-1.5 rounded-full transition-all ${i === page ? 'w-4 bg-fg' : 'w-1.5 bg-faint/50'}`}
-            />
-          </button>
-        ))}
-      </div>
       <div ref={scroller} onScroll={onScroll} className="snap-x-panels flex min-h-0 flex-1 overflow-x-auto">
         {panels.map((p) => (
           <ExercisePanel
@@ -129,21 +123,33 @@ export default function SessionPage() {
             closeEditor={() => setEditor(null)}
           />
         ))}
-        <section className="flex h-full w-full shrink-0 grow-0 basis-full flex-col gap-2 overflow-y-auto px-5 pt-2 pb-56 [scrollbar-width:none] [&>*]:shrink-0">
-          <div className="mb-4 flex h-[34px] items-center text-faint">
-            <Icon name="plus" size={26} />
-          </div>
+        <section className="no-scrollbar flex h-full w-full shrink-0 grow-0 basis-full flex-col overflow-y-auto px-5 pt-4 pb-56 [&>*]:shrink-0">
           {unused.map((e) => (
             <button
               key={e.id}
               onClick={() => addExercise(e.id)}
-              className="glass flex h-14 items-center rounded-[22px] px-5 text-left font-light transition active:scale-[0.98]"
+              className="flex h-14 items-center justify-between border-b border-line text-left transition active:text-dim"
             >
               <span className="truncate">{e.name}</span>
+              <Icon name="plus" size={18} className="shrink-0 text-faint" />
             </button>
           ))}
         </section>
       </div>
+      {!editor && (
+        <div className="flex shrink-0 justify-center pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+          {Array.from({ length: total }, (_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              aria-label={`${i + 1}`}
+              className="flex h-10 w-9 items-center justify-center"
+            >
+              <span className={`block h-1.5 w-1.5 rounded-full transition ${i === page ? 'bg-fg' : 'bg-faint'}`} />
+            </button>
+          ))}
+        </div>
+      )}
       {editor && (
         <Stepper
           editor={editor}

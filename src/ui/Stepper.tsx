@@ -4,6 +4,8 @@ import { Icon } from './Icon'
 
 export interface Editor {
   key: string
+  label?: string
+  unit?: string
   value: number
   step: number
   big?: number
@@ -44,13 +46,14 @@ function HoldButton({ onFire, children, className, label }: {
       onPointerCancel={stop}
       onContextMenu={(e) => e.preventDefault()}
       aria-label={label}
-      className={`flex shrink-0 items-center justify-center rounded-full border border-line transition active:bg-line ${className ?? ''}`}
+      className={`flex items-center justify-center rounded-full bg-chip transition active:bg-line ${className ?? ''}`}
     >
       {children}
     </button>
   )
 }
 
+/** 画面下の数値調整パネル */
 export function Stepper({ editor, onChange, onClose }: {
   editor: Editor
   onChange: (v: number) => void
@@ -68,34 +71,32 @@ export function Stepper({ editor, onChange, onClose }: {
   const fmt = editor.format ?? String
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-20 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-      <div className="glass rounded-[32px] bg-[#101018]/80 p-3">
-        <div className="pb-2 text-center text-4xl font-light tracking-tight">{fmt(editor.value)}</div>
-        <div className="flex items-center gap-2">
-          {editor.big ? (
-            <HoldButton label={`−${editor.big}`} onFire={() => add(-editor.big!)} className="h-14 flex-1 text-sm text-dim">
-              −{editor.big}
-            </HoldButton>
-          ) : null}
-          <HoldButton label="減らす" onFire={() => add(-editor.step)} className="h-14 flex-[1.4] text-fg">
-            <Icon name="minus" size={26} />
+    <div className="fixed inset-x-0 bottom-0 z-20 rounded-t-[28px] border-t border-line bg-panel px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+      <div className="relative flex h-12 items-center justify-center">
+        {editor.label && <span className="absolute left-1 text-[11px] tracking-[0.15em] text-dim">{editor.label}</span>}
+        <span className="text-4xl leading-none">{fmt(editor.value)}</span>
+        {editor.unit && <span className="ml-1.5 self-end pb-1 text-xs text-dim">{editor.unit}</span>}
+        <button onClick={onClose} aria-label="閉じる" className="absolute right-0 flex h-11 w-11 items-center justify-center text-dim">
+          <Icon name="down" />
+        </button>
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        {editor.big ? (
+          <HoldButton label={`−${editor.big}`} onFire={() => add(-editor.big!)} className="h-14 flex-1 text-sm text-dim">
+            −{editor.big}
           </HoldButton>
-          <HoldButton label="増やす" onFire={() => add(editor.step)} className="h-14 flex-[1.4] text-fg">
-            <Icon name="plus" size={26} />
+        ) : null}
+        <HoldButton label="減らす" onFire={() => add(-editor.step)} className="h-14 flex-[1.5] text-fg">
+          <Icon name="minus" size={26} />
+        </HoldButton>
+        <HoldButton label="増やす" onFire={() => add(editor.step)} className="h-14 flex-[1.5] text-fg">
+          <Icon name="plus" size={26} />
+        </HoldButton>
+        {editor.big ? (
+          <HoldButton label={`+${editor.big}`} onFire={() => add(editor.big!)} className="h-14 flex-1 text-sm text-dim">
+            +{editor.big}
           </HoldButton>
-          {editor.big ? (
-            <HoldButton label={`+${editor.big}`} onFire={() => add(editor.big!)} className="h-14 flex-1 text-sm text-dim">
-              +{editor.big}
-            </HoldButton>
-          ) : null}
-          <button
-            onClick={onClose}
-            aria-label="閉じる"
-            className="flex h-14 w-11 shrink-0 items-center justify-center rounded-full text-faint active:bg-line"
-          >
-            <Icon name="down" />
-          </button>
-        </div>
+        ) : null}
       </div>
     </div>
   )
