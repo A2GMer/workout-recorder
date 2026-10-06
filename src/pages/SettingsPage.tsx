@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { getSettings, listExercises, listRoutines, patch, remove, routineItems, save, uuid } from '../data/repo'
-import { db } from '../data/db'
+import { useNavigate } from 'react-router-dom'
+import { getSettings, listExercises, listRoutines, patch, save } from '../data/repo'
 import { supabase } from '../data/supabase'
-import { BODY_PART_LABEL, EQUIPMENT_LABEL, type BodyPart, type Equipment, type Exercise, type Routine, type RoutineItem, type Settings } from '../lib/types'
+import { BODY_PART_LABEL, EQUIPMENT_LABEL, type BodyPart, type Equipment, type Exercise, type Settings } from '../lib/types'
 import { Icon } from '../ui/Icon'
 import { BodyArt } from '../ui/BodyArt'
 import { TopBar } from '../ui/TopBar'
@@ -139,23 +139,13 @@ export default function SettingsPage() {
     exercises: await listExercises(),
     routines: await listRoutines(),
   }))
+  const nav = useNavigate()
   const [open, setOpen] = useState<string | null>(null)
   if (!data) return null
   const { settings, exercises, routines } = data
 
   const saveSettings = (c: Partial<Settings>) => save<Settings>('settings', { ...settings, ...c })
 
-  async function addRoutine() {
-    const r: Routine = { id: uuid(), name: `メニュー${routines.length + 1}`, body_parts: [], sort_order: routines.length }
-    await save('routines', r)
-    setOpen(r.id)
-  }
-
-  async function addExercise() {
-    const e = newExercise(`種目${exercises.length + 1}`, null, exercises.length)
-    await save('exercises', e)
-    setOpen(e.id)
-  }
 
   return (
     <div className="flex min-h-full flex-col">
@@ -163,7 +153,7 @@ export default function SettingsPage() {
       <main className="flex flex-col gap-8 px-5 pt-2 pb-[calc(env(safe-area-inset-bottom)+4rem)]">
         <Section title="BODY">
           <div className="flex flex-col rounded-2xl bg-panel px-5 py-1">
-            <StepField label="体重" unit="kg" step={0.1} min={20} value={settings.body_weight_kg} onChange={(v) => saveSettings({ body_weight_kg: v })} />
+            <StepField label="体重" unit="kg" step={1} min={20} max={250} value={Math.round(settings.body_weight_kg)} onChange={(v) => saveSettings({ body_weight_kg: v })} />
             <StepField label="EZバー" unit="kg" step={0.5} min={0} value={settings.ez_bar_kg} onChange={(v) => saveSettings({ ez_bar_kg: v })} />
             <StepField label="スミスバー" unit="kg" step={0.5} min={0} value={settings.smith_bar_kg} onChange={(v) => saveSettings({ smith_bar_kg: v })} />
           </div>
@@ -171,23 +161,28 @@ export default function SettingsPage() {
 
         <Section title="MENU">
           {routines.map((r) => (
-            <RoutineEditor
+            <button
               key={r.id}
-              routine={r}
-              exercises={exercises}
-              open={open === r.id}
-              toggle={() => setOpen(open === r.id ? null : r.id)}
-            />
+              onClick={() => nav(`/menu/${r.id}`)}
+              className="flex h-16 items-center gap-3 rounded-2xl bg-panel px-5 text-left"
+            >
+              <span className="min-w-0 flex-1 truncate">{r.name}</span>
+              <Icon name="back" size={18} className="shrink-0 rotate-180 text-faint" />
+            </button>
           ))}
-          <AddButton onClick={addRoutine} label="メニュー追加" />
+          <AddButton onClick={() => nav('/menu/new')} label="メニュー作成" />
         </Section>
 
         <Section title="EXERCISE">
           {exercises.map((e) => (
             <ExerciseEditor key={e.id} ex={e} open={open === e.id} toggle={() => setOpen(open === e.id ? null : e.id)} />
           ))}
-          <AddButton onClick={addExercise} label="種目追加" />
+          <p className="px-2 text-xs leading-5 text-faint">種目はメニュー作成の中で追加します</p>
         </Section>
+
+        <button onClick={() => nav('/welcome?howto')} className="mx-auto h-11 px-6 text-sm text-dim">
+          使い方を見る
+        </button>
 
         {supabase && (
           <button onClick={() => supabase!.auth.signOut()} className="mx-auto h-11 px-6 text-sm text-faint">
@@ -266,140 +261,6 @@ function ExerciseEditor({ ex, open, toggle }: { ex: Exercise; open: boolean; tog
   )
 }
 
-function RoutineEditor({ routine, exercises, open, toggle }: {
-  routine: Routine
-  exercises: Exercise[]
-  open: boolean
-  toggle: () => void
-}) {
-  const items = useLiveQuery(() => routineItems(routine.id), [routine.id]) ?? []
-  const [newName, setNewName] = useState('')
-  const byId = new Map(exercises.map((e) => [e.id, e]))
-  const shown = items.filter((it) => byId.has(it.exercise_id))
-  const parts = routine.body_parts ?? []
-
-  async function move(i: number, d: -1 | 1) {
-    const j = i + d
-    if (j < 0 || j >= shown.length) return
-    const a = shown[i]
-    const b = shown[j]
-    await save<RoutineItem>('routine_items', [
-      { ...a, sort_order: b.sort_order },
-      { ...b, sort_order: a.sort_order },
-    ])
-  }
-
-  async function add(exerciseId: string) {
-    await save<RoutineItem>('routine_items', {
-      id: uuid(),
-      routine_id: routine.id,
-      exercise_id: exerciseId,
-      sort_order: Math.max(-1, ...items.map((i) => i.sort_order)) + 1,
-    })
-  }
-
-  // 連続タップでも取りこぼさないよう、切り替えは順番に、保存済みの最新値から行う
-  const queue = useRef(Promise.resolve())
-  function togglePart(p: BodyPart) {
-    queue.current = queue.current.then(async () => {
-      const cur = (await db.routines.get(routine.id))?.body_parts ?? []
-      const next = cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]
-      // 名前を手で変えていなければ、部位から自動で付ける（例: 胸・背中）
-      const name = (await db.routines.get(routine.id))?.name ?? ''
-      const auto = /^メニュー\d+$/.test(name) || name === partsName(cur)
-      await patch<Routine>('routines', routine.id, auto && next.length ? { body_parts: next, name: partsName(next) } : { body_parts: next })
-    })
-  }
-
-  /** 選択中の部位で新しい種目を作り、そのままメニューに入れる */
-  async function createExercise() {
-    const name = newName.trim()
-    if (!name) return
-    const e = newExercise(name, parts.length === 1 ? parts[0] : null, exercises.length)
-    await save('exercises', e)
-    await add(e.id)
-    setNewName('')
-  }
-
-  // 部位を選んでいればその部位の種目だけ。部位未設定の種目は別枠で薄く出す
-  const unused = exercises.filter((e) => !shown.some((it) => it.exercise_id === e.id))
-  const matched = parts.length ? unused.filter((e) => e.body_part && parts.includes(e.body_part)) : unused
-  const unset = parts.length ? unused.filter((e) => !e.body_part) : []
-
-  const chip = (e: Exercise, dim = false) => (
-    <button
-      key={e.id}
-      onClick={() => add(e.id)}
-      className={`flex h-10 max-w-full items-center gap-1.5 rounded-full bg-chip pr-4 pl-3 text-sm transition active:bg-line ${dim ? 'text-dim' : ''}`}
-    >
-      <Icon name="plus" size={14} className="shrink-0 text-faint" />
-      <span className="truncate">{e.name}</span>
-    </button>
-  )
-
-  return (
-    <div className="rounded-2xl bg-panel">
-      <Row
-        title={routine.name}
-        meta={parts.length ? parts.map((p) => BODY_PART_LABEL[p]).join('・') : shown.length}
-        open={open}
-        toggle={toggle}
-      />
-      {open && (
-        <div className="flex flex-col gap-2 border-t border-line px-5 pt-4 pb-3">
-          <TextField value={routine.name} onCommit={(v) => v.trim() && patch<Routine>('routines', routine.id, { name: v.trim() })} />
-
-          <span className="mt-3 text-[11px] tracking-[0.2em] text-dim">TARGET</span>
-          <PartPicker selected={parts} onToggle={togglePart} />
-
-          {shown.length > 0 && <span className="mt-3 text-[11px] tracking-[0.2em] text-dim">EXERCISE</span>}
-          {shown.map((it, i) => (
-            <div key={it.id} className="flex h-12 items-center rounded-xl bg-chip pl-4">
-              <span className="min-w-0 flex-1 truncate text-sm">{byId.get(it.exercise_id)!.name}</span>
-              <button onClick={() => move(i, -1)} disabled={i === 0} className="flex h-12 w-10 items-center justify-center text-faint disabled:opacity-20" aria-label="上へ">
-                <Icon name="up" size={18} />
-              </button>
-              <button onClick={() => move(i, 1)} disabled={i === shown.length - 1} className="flex h-12 w-10 items-center justify-center text-faint disabled:opacity-20" aria-label="下へ">
-                <Icon name="down" size={18} />
-              </button>
-              <button onClick={() => remove('routine_items', it.id)} className="flex h-12 w-10 items-center justify-center text-faint" aria-label="外す">
-                <Icon name="close" size={16} />
-              </button>
-            </div>
-          ))}
-
-          {(matched.length > 0 || unset.length > 0) && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {matched.map((e) => chip(e))}
-              {unset.map((e) => chip(e, true))}
-            </div>
-          )}
-
-          <div className="mt-1 flex items-center gap-2">
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && createExercise()}
-              placeholder={parts.length === 1 ? `新しい${BODY_PART_LABEL[parts[0]]}の種目` : '新しい種目'}
-              className={`${inputCls} min-w-0 flex-1`}
-            />
-            <button
-              onClick={createExercise}
-              disabled={!newName.trim()}
-              aria-label="種目を作成して追加"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-fg text-bg disabled:bg-chip disabled:text-faint"
-            >
-              <Icon name="plus" size={20} />
-            </button>
-          </div>
-
-          <DeleteButton onClick={() => confirm(`${routine.name} 削除？`) && remove('routines', routine.id)} />
-        </div>
-      )}
-    </div>
-  )
-}
-
 /** 部位の選択（複数可）。模様つき */
 function PartPicker({ selected, onToggle }: { selected: (BodyPart | null | undefined)[]; onToggle: (p: BodyPart) => void }) {
   return (
@@ -422,20 +283,4 @@ function PartPicker({ selected, onToggle }: { selected: (BodyPart | null | undef
   )
 }
 
-function newExercise(name: string, bodyPart: BodyPart | null, sortOrder: number): Exercise {
-  return {
-    id: uuid(),
-    name,
-    equipment: 'barbell',
-    body_part: bodyPart,
-    weight_step: 2.5,
-    target_reps: 3,
-    main_sets: 5,
-    pyramid: true,
-    backoff_ratio: 0.6,
-    sort_order: sortOrder,
-    archived: false,
-  }
-}
 
-const partsName = (parts: BodyPart[]) => parts.map((p) => BODY_PART_LABEL[p]).join('・')

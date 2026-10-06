@@ -1,10 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { lastSessionOf, listRoutines, localDate, routineProfile, startSession } from '../data/repo'
 import { md } from '../lib/format'
 import { BodyArt } from '../ui/BodyArt'
 import { Icon } from '../ui/Icon'
 import { IconButton, TopBar } from '../ui/TopBar'
+import { isOnboarded } from './Welcome'
 
 export default function Home() {
   const nav = useNavigate()
@@ -19,6 +20,9 @@ export default function Home() {
   const next = routines?.length
     ? [...routines].sort((a, b) => (a.last?.date ?? '') .localeCompare(b.last?.date ?? '') || a.sort_order - b.sort_order)[0]
     : undefined
+
+  // 初回（メニューが1つもなく、チュートリアル未完了）はチュートリアルへ
+  if (routines?.length === 0 && !isOnboarded()) return <Navigate to="/welcome" replace />
 
   async function start(id: string) {
     nav(`/s/${await startSession(id)}`)
@@ -74,14 +78,16 @@ export default function Home() {
             <span className="h-3 text-[11px] leading-3 text-faint">{r.last ? md(r.last.date) : ''}</span>
           </button>
         ))}
-        {routines?.length === 0 && (
-          <button onClick={() => nav('/settings')} className="mx-auto flex flex-col items-center gap-2 text-dim">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full border border-dashed border-faint">
-              <Icon name="plus" />
-            </span>
-            <span className="text-[13px]">メニューを作成</span>
-          </button>
-        )}
+        <button
+          onClick={() => nav('/menu/new')}
+          className="flex w-[84px] shrink-0 snap-center flex-col items-center gap-2 text-dim transition first:ml-auto last:mr-auto active:text-fg"
+        >
+          <span className="flex h-14 w-14 items-center justify-center rounded-full border border-dashed border-faint">
+            <Icon name="plus" />
+          </span>
+          <span className="text-[13px] leading-4">メニュー作成</span>
+          <span className="h-3" />
+        </button>
       </nav>
     </div>
   )

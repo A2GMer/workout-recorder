@@ -2,6 +2,7 @@ import { db, SETTINGS_ID, type SyncTable } from './db'
 import { scheduleSync } from './sync'
 import type {
   BodyPart,
+  Equipment,
   Exercise,
   Routine,
   RoutineItem,
@@ -12,6 +13,7 @@ import type {
   WorkSet,
 } from '../lib/types'
 import { challenge, type PrevPerformance } from '../lib/progression'
+import { exerciseDefaults, PRESETS } from '../lib/presets'
 
 export const uuid = () => crypto.randomUUID()
 
@@ -160,6 +162,89 @@ export async function startSession(routineId: string): Promise<string> {
   await save('sessions', session)
   if (ses.length) await save('session_exercises', ses)
   return session.id
+}
+
+// ---- メニュー作成 ----
+
+/** メニュー作成で選べる種目。作成済みの種目 + まだ作っていない事前登録 */
+export interface Candidate {
+  key: string
+  name: string
+  part: BodyPart | null
+  equipment: Equipment
+  heavy: boolean
+  /** 作成済みならその種目。未作成（事前登録・新規）は保存時に作る */
+  exercise?: Exercise
+}
+
+export async function listCandidates(): Promise<Candidate[]> {
+  const mine = await listExercises()
+  const names = new Set(mine.map((e) => e.name))
+  return [
+    ...mine.map((e) => ({
+      key: e.id,
+      name: e.name,
+      part: e.body_part ?? null,
+      equipment: e.equipment,
+      heavy: e.pyramid,
+      exercise: e,
+    })),
+    ...PRESETS.filter((p) => !names.has(p.name)).map((p) => ({
+      key: `preset:${p.name}`,
+      name: p.name,
+      part: p.part,
+      equipment: p.equipment,
+      heavy: p.heavy,
+    })),
+  ]
+}
+
+/** メニューを保存（新規/更新）。未作成の種目はここで作る */
+export async function saveRoutine(input: {
+  id?: string
+  name: string
+  body_parts: BodyPart[]
+  candidates: Candidate[]
+}): Promise<string> {
+  const exercises = await listExercises(true)
+  let order = exercises.length
+  const exerciseIds: string[] = []
+  for (const c of input.candidates) {
+    if (c.exercise) {
+      exerciseIds.push(c.exercise.id)
+      continue
+    }
+    const e: Exercise = {
+      id: uuid(),
+      name: c.name,
+      equipment: c.equipment,
+      body_part: c.part,
+      ...exerciseDefaults(c.equipment, c.heavy),
+      sort_order: order++,
+      archived: false,
+    }
+    await save('exercises', e)
+    exerciseIds.push(e.id)
+  }
+
+  const routines = await listRoutines()
+  const existing = input.id ? await db.routines.get(input.id) : undefined
+  const routine: Routine = {
+    ...(existing ?? { id: uuid(), sort_order: routines.length }),
+    name: input.name,
+    body_parts: input.body_parts,
+  }
+  await save('routines', routine)
+
+  // 並び順どおりに置き換える（既存の行は使い回し、外れたものは削除）
+  const items = existing ? await routineItems(routine.id) : []
+  const next: RoutineItem[] = exerciseIds.map((exerciseId, i) => {
+    const old = items.find((it) => it.exercise_id === exerciseId)
+    return { ...(old ?? { id: uuid(), routine_id: routine.id, exercise_id: exerciseId }), sort_order: i }
+  })
+  const removed = items.filter((it) => !exerciseIds.includes(it.exercise_id)).map((it) => ({ ...it, deleted: true }))
+  await save('routine_items', [...next, ...removed])
+  return routine.id
 }
 
 export interface RoutineProfile {

@@ -10,7 +10,8 @@ npm run dev
 
 ## 1. Supabase プロジェクトを作る
 1. https://supabase.com にログインし **New project**（リージョンは Tokyo 推奨）
-2. **SQL Editor** を開き、`supabase/migrations/0001_init.sql` の中身を貼り付けて **Run**
+2. **SQL Editor** を開き、`supabase/migrations/` の SQL を番号順（0001 → 0002 → …）に貼り付けて **Run**
+   - アプリの更新で SQL が増えたときも、未実行のものを番号順に実行する（実行前に使うと同期が止まる）
 3. **Authentication > Sign In / Providers > Email**
    - **Allow new users to sign up を ON**（アプリの「新規登録」から登録するため）
    - **Confirm email を OFF**（登録後すぐログインできる。ON だと確認メールが必要で、送信数の制限にもかかる）

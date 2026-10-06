@@ -61,10 +61,10 @@ export default function SessionPage() {
       key: 'bw',
       label: 'BODY',
       unit: 'kg',
-      value: session.body_weight_kg,
-      step: 0.1,
-      big: 1,
-      min: 0,
+      value: Math.round(session.body_weight_kg),
+      step: 1,
+      big: 5,
+      min: 20,
       apply: (v) => {
         void patch<Session>('sessions', session.id, { body_weight_kg: v })
         void save<Settings>('settings', { ...settings, body_weight_kg: v })

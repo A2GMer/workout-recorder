@@ -29,14 +29,21 @@ export function IconButton({ children, label, onClick }: { children: ReactNode; 
 }
 
 /** 左: 戻る / 中央: タイトル / 右: 任意（左右は同じ幅にして中央を揃える） */
-export function TopBar({ title, sub, back, right, side = 64 }: { title?: ReactNode; sub?: ReactNode; back?: string; right?: ReactNode; side?: number }) {
+export function TopBar({ title, sub, back, onBack, right, side = 64 }: {
+  title?: ReactNode
+  sub?: ReactNode
+  back?: string
+  onBack?: () => void
+  right?: ReactNode
+  side?: number
+}) {
   const nav = useNavigate()
   return (
     <header className="safe-top sticky top-0 z-10 bg-bg">
       <div className="relative flex h-14 items-center px-2">
         <div className="flex shrink-0 items-center" style={{ width: side }}>
-          {back !== undefined && (
-            <IconButton label="戻る" onClick={() => nav(back)}>
+          {(back !== undefined || onBack) && (
+            <IconButton label="戻る" onClick={() => (onBack ? onBack() : nav(back!))}>
               <Icon name="back" />
             </IconButton>
           )}

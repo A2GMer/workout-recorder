@@ -45,6 +45,14 @@ select {
   outline: none;
 }
 
+/* 日本語を文節で折り返し、行の長さを揃える */
+h1,
+h2,
+p {
+  word-break: auto-phrase;
+  text-wrap: balance;
+}
+
 .safe-top {
   padding-top: env(safe-area-inset-top);
 }
