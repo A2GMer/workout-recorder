@@ -6,6 +6,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--port", "5173", "--strictPort"],
       "port": 5173
+    },
+    {
+      "name": "dev-offline",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--mode", "offline", "--port", "5174", "--strictPort"],
+      "port": 5174
     }
   ]
 }

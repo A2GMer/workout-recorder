@@ -16,6 +16,7 @@ import { md, num } from '../lib/format'
 import type { Session, SessionExercise, Settings } from '../lib/types'
 import { Stepper, type Editor } from '../ui/Stepper'
 import { TopBar } from '../ui/TopBar'
+import { Icon } from '../ui/Icon'
 import { ExercisePanel, type PanelData } from './ExercisePanel'
 
 export default function SessionPage() {
@@ -48,6 +49,11 @@ export default function SessionPage() {
   function onScroll() {
     const el = scroller.current!
     setPage(Math.round(el.scrollLeft / el.clientWidth))
+  }
+
+  function goTo(i: number) {
+    const el = scroller.current!
+    el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' })
   }
 
   function editBodyWeight() {
@@ -89,16 +95,26 @@ export default function SessionPage() {
         right={
           <button
             onClick={editBodyWeight}
-            className={`rounded-lg px-2 py-1 text-sm text-dim ${editor?.key === 'bw' ? 'ring-2 ring-accent' : ''}`}
+            className={`h-11 rounded-full px-3 text-sm transition ${editor?.key === 'bw' ? 'bg-line text-fg' : 'text-dim'}`}
             aria-label="体重"
           >
-            {num(session.body_weight_kg)}kg
+            {num(session.body_weight_kg)}
+            <span className="ml-0.5 text-[11px] text-faint">kg</span>
           </button>
         }
       />
-      <div className="flex justify-center gap-1.5 py-1">
+      <div className="flex justify-center">
         {Array.from({ length: total }, (_, i) => (
-          <span key={i} className={`h-1.5 w-1.5 rounded-full ${i === page ? 'bg-fg' : 'bg-line'}`} />
+          <button
+            key={i}
+            onClick={() => goTo(i)}
+            aria-label={`${i + 1}`}
+            className="flex h-8 w-7 items-center justify-center"
+          >
+            <span
+              className={`block h-1.5 rounded-full transition-all ${i === page ? 'w-4 bg-fg' : 'w-1.5 bg-faint/50'}`}
+            />
+          </button>
         ))}
       </div>
       <div ref={scroller} onScroll={onScroll} className="snap-x-panels flex min-h-0 flex-1 overflow-x-auto">
@@ -113,11 +129,17 @@ export default function SessionPage() {
             closeEditor={() => setEditor(null)}
           />
         ))}
-        <section className="flex h-full w-screen shrink-0 flex-col gap-2 overflow-y-auto px-4 pt-3 pb-40">
-          <div className="text-center text-3xl text-dim">＋</div>
+        <section className="flex h-full w-full shrink-0 grow-0 basis-full flex-col gap-2 overflow-y-auto px-5 pt-2 pb-56 [scrollbar-width:none] [&>*]:shrink-0">
+          <div className="mb-4 flex h-[34px] items-center text-faint">
+            <Icon name="plus" size={26} />
+          </div>
           {unused.map((e) => (
-            <button key={e.id} onClick={() => addExercise(e.id)} className="rounded-xl bg-panel px-4 py-3 text-left">
-              {e.name}
+            <button
+              key={e.id}
+              onClick={() => addExercise(e.id)}
+              className="glass flex h-14 items-center rounded-[22px] px-5 text-left font-light transition active:scale-[0.98]"
+            >
+              <span className="truncate">{e.name}</span>
             </button>
           ))}
         </section>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../data/supabase'
+import { Icon } from '../ui/Icon'
 
 const EMAIL_KEY = 'login-email'
 
@@ -46,45 +47,62 @@ export default function Login() {
     setError(!!error)
   }
 
-  const input = 'rounded-lg bg-panel px-4 py-3'
-  const button = 'rounded-lg bg-accent py-3 font-bold text-black disabled:opacity-50'
+  const field = 'glass h-14 w-full rounded-full px-6 text-center placeholder:text-faint'
+  const go = (disabled: boolean) => (
+    <button
+      disabled={disabled}
+      aria-label="次へ"
+      className="grad mx-auto flex h-14 w-14 items-center justify-center rounded-full text-bg shadow-[0_0_32px_rgb(169_155_255/0.45)] transition disabled:opacity-30 disabled:shadow-none"
+    >
+      <Icon name="arrow" />
+    </button>
+  )
 
-  return step === 'email' ? (
-    <form onSubmit={sendCode} className="safe-top mx-auto flex max-w-sm flex-col gap-3 p-6 pt-24">
-      <input
-        type="email"
-        autoComplete="email"
-        placeholder="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className={input}
-      />
-      {error && <p className="text-sm text-down">×</p>}
-      <button disabled={busy || !email.trim()} className={button}>
-        →
-      </button>
-    </form>
-  ) : (
-    <form onSubmit={verify} className="safe-top mx-auto flex max-w-sm flex-col gap-3 p-6 pt-24">
-      <p className="text-center text-sm text-dim">{email}</p>
-      <input
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        pattern="[0-9]*"
-        maxLength={8}
-        placeholder="000000"
-        value={code}
-        onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-        autoFocus
-        className={`${input} text-center text-2xl tracking-[0.4em]`}
-      />
-      {error && <p className="text-center text-sm text-down">×</p>}
-      <button disabled={busy || code.length < 6} className={button}>
-        →
-      </button>
-      <button type="button" onClick={() => { setStep('email'); setCode(''); setError(false) }} className="text-sm text-dim">
-        ‹
-      </button>
-    </form>
+  return (
+    <div className="safe-top safe-bottom flex min-h-full flex-col items-center justify-center px-8">
+      <div className="mb-14 h-28 w-28 rounded-full grad opacity-80 blur-[2px] shadow-[0_0_80px_rgb(169_155_255/0.5)]" />
+      {step === 'email' ? (
+        <form onSubmit={sendCode} className="flex w-full max-w-xs flex-col gap-6">
+          <input
+            type="email"
+            autoComplete="email"
+            placeholder="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={field}
+          />
+          {go(busy || !email.trim())}
+        </form>
+      ) : (
+        <form onSubmit={verify} className="flex w-full max-w-xs flex-col gap-6">
+          <p className="truncate text-center text-sm text-dim">{email}</p>
+          <input
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]*"
+            maxLength={8}
+            placeholder="······"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            autoFocus
+            className={`${field} text-2xl font-light tracking-[0.5em]`}
+          />
+          {go(busy || code.length < 6)}
+          <button
+            type="button"
+            onClick={() => {
+              setStep('email')
+              setCode('')
+              setError(false)
+            }}
+            aria-label="戻る"
+            className="mx-auto flex h-11 w-11 items-center justify-center text-faint"
+          >
+            <Icon name="back" />
+          </button>
+        </form>
+      )}
+      <p className={`mt-4 h-5 text-sm text-down transition ${error ? 'opacity-100' : 'opacity-0'}`}>×</p>
+    </div>
   )
 }

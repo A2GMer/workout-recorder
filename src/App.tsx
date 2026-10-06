@@ -8,6 +8,7 @@ import SessionPage from './pages/SessionPage'
 import History from './pages/History'
 import SettingsPage from './pages/SettingsPage'
 import Login from './pages/Login'
+import { Ambient } from './ui/Icon'
 
 export default function App() {
   const [auth, setAuth] = useState<Session | null | undefined>(supabase ? undefined : null)
@@ -22,15 +23,19 @@ export default function App() {
     return () => data.subscription.unsubscribe()
   }, [])
 
-  if (auth === undefined) return null
-  if (supabase && !auth) return <Login />
-
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/s/:id" element={<SessionPage />} />
-      <Route path="/history" element={<History />} />
-      <Route path="/settings" element={<SettingsPage />} />
-    </Routes>
+    <>
+      <Ambient />
+      {auth === undefined ? null : supabase && !auth ? (
+        <Login />
+      ) : (
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/s/:id" element={<SessionPage />} />
+          <Route path="/history" element={<History />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>
+      )}
+    </>
   )
 }

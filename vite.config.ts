@@ -18,15 +18,15 @@ export default defineConfig({
         start_url: '/',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#0a0a0a',
-        theme_color: '#0a0a0a',
+        background_color: '#06060a',
+        theme_color: '#06060a',
         icons: [
           { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
         ],
       },
       workbox: {
         navigateFallback: '/index.html',
-        globPatterns: ['**/*.{js,css,html,svg}'],
+        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
       },
     }),
   ],

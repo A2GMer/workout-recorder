@@ -1,8 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { lastSessionOf, listRoutines, startSession } from '../data/repo'
 import { md } from '../lib/format'
-import { TopBar } from '../ui/TopBar'
+import { Icon } from '../ui/Icon'
+import { IconButton, TopBar } from '../ui/TopBar'
 
 export default function Home() {
   const nav = useNavigate()
@@ -19,34 +20,38 @@ export default function Home() {
     <div className="flex min-h-full flex-col">
       <TopBar
         right={
-          <nav className="flex gap-1 text-xl">
-            <Link to="/history" className="px-2" aria-label="履歴">
-              ☰
-            </Link>
-            <Link to="/settings" className="px-2" aria-label="設定">
-              ⚙
-            </Link>
-          </nav>
+          <>
+            <IconButton label="履歴" onClick={() => nav('/history')}>
+              <Icon name="history" />
+            </IconButton>
+            <IconButton label="設定" onClick={() => nav('/settings')}>
+              <Icon name="settings" />
+            </IconButton>
+          </>
         }
       />
-      <main className="flex flex-1 flex-col gap-3 p-4">
+      <div className="flex min-h-40 flex-1 items-center justify-center">
+        <div className="grad h-32 w-32 rounded-full opacity-80 blur-[2px] shadow-[0_0_90px_rgb(169_155_255/0.5)]" />
+      </div>
+      <main className="flex flex-col gap-3 px-5 pb-[calc(env(safe-area-inset-bottom)+2.5rem)]">
         {routines?.map((r) => (
           <button
             key={r.id}
             onClick={() => start(r.id)}
-            className="flex items-baseline justify-between rounded-2xl bg-panel px-5 py-6 text-left active:bg-line"
+            className="glass flex items-center justify-between rounded-[28px] px-7 py-7 text-left transition active:scale-[0.98]"
           >
-            <span className="text-xl font-bold">{r.name}</span>
-            {r.last && <span className="text-sm text-dim">{md(r.last.date)}</span>}
+            <span className="min-w-0 truncate text-2xl font-light tracking-tight">{r.name}</span>
+            <span className="ml-4 shrink-0 text-sm text-faint">{r.last ? md(r.last.date) : ''}</span>
           </button>
         ))}
         {routines?.length === 0 && (
-          <Link
-            to="/settings"
-            className="rounded-2xl border border-dashed border-line py-10 text-center text-3xl text-dim"
+          <button
+            onClick={() => nav('/settings')}
+            aria-label="メニューを作成"
+            className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-line text-dim"
           >
-            ＋
-          </Link>
+            <Icon name="plus" size={28} />
+          </button>
         )}
       </main>
     </div>

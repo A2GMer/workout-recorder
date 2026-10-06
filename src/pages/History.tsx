@@ -5,6 +5,7 @@ import { listExercises, listSessions, remove, sessionExercises, setsOf } from '.
 import { fmtVolume, md } from '../lib/format'
 import { volume } from '../lib/progression'
 import { TopBar } from '../ui/TopBar'
+import { Icon } from '../ui/Icon'
 
 export default function History() {
   const rows = useLiveQuery(async () => {
@@ -29,20 +30,20 @@ export default function History() {
   return (
     <div className="flex min-h-full flex-col">
       <TopBar back="/" />
-      <main className="flex flex-col gap-2 p-4">
+      <main className="flex flex-col gap-2 px-5 pt-2 pb-[calc(env(safe-area-inset-bottom)+2.5rem)]">
         {rows?.map(({ s, total, count, name }) => (
-          <div key={s.id} className="flex items-center rounded-xl bg-panel">
-            <Link to={`/s/${s.id}`} className="flex flex-1 items-baseline gap-3 px-4 py-3">
-              <span className="w-12 text-dim">{md(s.date)}</span>
-              <span className="flex-1 truncate">{name ?? '—'}</span>
-              <span className="font-bold">{count ? fmtVolume(total) : ''}</span>
+          <div key={s.id} className="glass flex h-16 items-center rounded-[22px]">
+            <Link to={`/s/${s.id}`} className="flex h-full min-w-0 flex-1 items-center gap-4 pl-5">
+              <span className="w-11 shrink-0 text-sm text-faint">{md(s.date)}</span>
+              <span className="min-w-0 flex-1 truncate font-light">{name ?? '—'}</span>
+              <span className="shrink-0 text-lg font-light">{count ? fmtVolume(total) : ''}</span>
             </Link>
             <button
               onClick={() => confirm(`${md(s.date)} ${name ?? ''} 削除？`) && remove('sessions', s.id)}
-              className="px-4 py-3 text-dim"
+              className="flex h-full w-12 shrink-0 items-center justify-center text-faint"
               aria-label="削除"
             >
-              ×
+              <Icon name="close" size={18} />
             </button>
           </div>
         ))}

@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:offline": "vite --mode offline --port 5174",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
     "@supabase/supabase-js": "^2.117.2",
     "dexie": "^4.4.6",
     "dexie-react-hooks": "^4.4.0",

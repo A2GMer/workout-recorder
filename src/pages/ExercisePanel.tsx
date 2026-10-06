@@ -13,6 +13,7 @@ import {
 import { fmtSets, fmtVolume, fmtWeight, md, num } from '../lib/format'
 import type { Exercise, Session, SessionExercise, Settings, SetKind, WorkSet } from '../lib/types'
 import type { Editor } from '../ui/Stepper'
+import { Icon } from '../ui/Icon'
 
 type Field = 'weight' | 'reps' | 'cheat'
 interface Draft {
@@ -119,7 +120,8 @@ export function ExercisePanel({
     setDrafts((ds) => ({ ...ds, [key]: { ...ds[key], [field]: v } }))
   }
 
-  function edit(row: Row, field: Field) {
+  function edit(row: Row, field: Field, el: HTMLElement) {
+    el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
     const value = field === 'weight' ? row.weight : field === 'reps' ? row.reps : row.cheat
     const isW = field === 'weight'
     openEditor({
@@ -181,82 +183,101 @@ export function ExercisePanel({
   useEffect(() => () => flush(), []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const cell = (row: Row, field: Field) =>
-    activeKey === `${se.id}:${row.key}:${field}` ? 'ring-2 ring-accent' : ''
+    activeKey === `${se.id}:${row.key}:${field}` ? 'bg-line text-fg' : ''
+  const progress = sugg.prevVolume ? Math.min(1, actual / sugg.prevVolume) : 0
 
   return (
-    <section className="flex h-full w-screen shrink-0 flex-col overflow-y-auto px-4 pb-40">
-      <div className="flex items-end justify-between pt-3">
-        <h2 className="text-xl font-bold">{ex.name}</h2>
-        <div className="text-right">
-          <span className="text-2xl font-bold">{fmtVolume(actual)}</span>
-          {delta !== null && (
-            <span className={`ml-2 text-sm font-bold ${delta > 0 ? 'text-up' : 'text-dim'}`}>
-              {delta > 0 ? '▲' : delta < 0 ? '▼' : '±'}
-              {fmtVolume(Math.abs(delta))}
-            </span>
-          )}
-        </div>
+    <section className="flex h-full w-full shrink-0 grow-0 basis-full flex-col overflow-y-auto px-5 pb-56 [scrollbar-width:none] [&>*]:shrink-0">
+      <h2 className="truncate pt-2 text-[26px] font-light tracking-tight">{ex.name}</h2>
+
+      <div className="mt-3 flex items-baseline gap-3">
+        <span className="text-4xl font-extralight tracking-tight">{fmtVolume(actual)}</span>
+        {delta !== null &&
+          (delta > 0 ? (
+            <span className="text-sm text-up">+{fmtVolume(delta)}</span>
+          ) : (
+            <span className="text-sm text-faint">/ {fmtVolume(sugg.prevVolume!)}</span>
+          ))}
       </div>
+      {sugg.prevVolume !== null && (
+        <div className="mt-3 h-[3px] w-full overflow-hidden rounded-full bg-line">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${delta !== null && delta > 0 ? 'bg-up' : 'grad'}`}
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
+      )}
       {prev && (
-        <div className="mt-1 truncate text-xs text-dim">
-          {md(prev.session.date)} {fmtSets(ex.equipment, [...prev.prev.main, ...prev.prev.backoff])}
+        <div className="mt-2 truncate text-xs text-faint">
+          {md(prev.session.date)}　{fmtSets(ex.equipment, [...prev.prev.main, ...prev.prev.backoff])}
         </div>
       )}
 
-      <div className="mt-3 flex flex-col gap-2">
+      <div className="mt-6 flex flex-col gap-2">
         {rows.map((row) => {
           const recorded = !!row.rec
-          const tone = recorded ? 'text-fg' : 'text-dim'
+          const tone = recorded ? 'text-fg' : 'text-faint'
           const perSide = bar > 0 ? (row.weight - bar) / 2 : null
+          const backoff = row.kind === 'backoff'
           return (
             <div
               key={row.key}
-              className={`flex items-center gap-1 rounded-xl px-2 py-1 ${
-                row.kind === 'backoff' ? 'mt-2 border border-dashed border-line' : 'bg-panel'
+              className={`flex h-[68px] items-center rounded-[22px] pl-2 pr-2 transition ${
+                backoff ? 'mt-3 border border-dashed border-line' : recorded ? 'glass' : 'border border-transparent'
               }`}
             >
-              <span className="w-5 text-center text-xs text-dim">{row.kind === 'backoff' ? 'B' : row.setNo}</span>
+              <span className="w-6 shrink-0 text-center text-[11px] tracking-widest text-faint">
+                {backoff ? 'B' : row.setNo}
+              </span>
               <button
-                onClick={() => edit(row, 'weight')}
-                className={`flex w-24 flex-col items-end rounded-lg px-2 py-1 ${tone} ${cell(row, 'weight')}`}
+                onClick={(e) => edit(row, 'weight', e.currentTarget)}
+                className={`flex h-14 w-[96px] shrink-0 flex-col items-end justify-center rounded-2xl px-2 transition ${tone} ${cell(row, 'weight')}`}
               >
-                <span className="text-2xl font-bold">{fmtWeight(ex.equipment, row.weight)}</span>
-                {perSide !== null && perSide > 0 && <span className="text-[10px] text-dim">片{num(perSide)}</span>}
+                <span className="text-[28px] leading-none font-light tracking-tight">{fmtWeight(ex.equipment, row.weight)}</span>
+                {perSide !== null && perSide > 0 && (
+                  <span className="mt-1 text-[10px] leading-none text-faint">片 {num(perSide)}</span>
+                )}
               </button>
-              <span className="text-dim">×</span>
+              <span className="w-5 shrink-0 text-center text-sm text-faint">×</span>
               <button
-                onClick={() => edit(row, 'reps')}
-                className={`flex w-16 items-baseline justify-start rounded-lg px-2 py-2 ${tone} ${cell(row, 'reps')}`}
+                onClick={(e) => edit(row, 'reps', e.currentTarget)}
+                className={`flex h-14 min-w-[52px] shrink-0 items-center justify-start rounded-2xl px-2 transition ${tone} ${cell(row, 'reps')}`}
               >
-                <span className="text-2xl font-bold">{row.reps}</span>
-                {!recorded && row.need ? <span className="ml-1 text-xs text-accent">≥{row.need}</span> : null}
+                <span className="text-[28px] leading-none font-light">{row.reps}</span>
+                {!recorded && row.need ? <span className="ml-1.5 text-xs text-accent">≥{row.need}</span> : null}
               </button>
               <button
-                onClick={() => edit(row, 'cheat')}
-                className={`rounded-lg px-2 py-2 text-sm ${row.cheat > 0 ? 'text-accent' : 'text-line'} ${cell(row, 'cheat')}`}
+                onClick={(e) => edit(row, 'cheat', e.currentTarget)}
                 aria-label="チーティング回数"
+                className={`ml-auto flex h-11 min-w-11 shrink-0 items-center justify-center rounded-full px-2 text-xs transition ${
+                  row.cheat > 0 ? 'text-warm' : 'text-faint/60'
+                } ${cell(row, 'cheat')}`}
               >
                 C{row.cheat}
               </button>
               <button
                 onClick={() => toggle(row)}
                 aria-label={recorded ? '記録取消' : '記録'}
-                className={`ml-auto flex h-12 w-12 items-center justify-center rounded-full text-2xl ${
-                  recorded ? 'bg-accent text-black' : 'border-2 border-line text-line'
+                className={`ml-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition active:scale-90 ${
+                  recorded ? 'grad text-bg shadow-[0_0_24px_rgb(169_155_255/0.55)]' : 'border border-line text-faint'
                 }`}
               >
-                ✓
+                <Icon name="check" />
               </button>
             </div>
           )
         })}
-        <button onClick={() => setExtra((n) => n + 1)} className="self-start px-3 py-1 text-2xl text-dim" aria-label="セット追加">
-          ＋
+        <button
+          onClick={() => setExtra((n) => n + 1)}
+          aria-label="セット追加"
+          className="mx-auto mt-1 flex h-11 w-11 items-center justify-center rounded-full text-faint active:bg-panel"
+        >
+          <Icon name="plus" />
         </button>
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
-        <span className="text-xs text-dim">軽</span>
+      <div className="mt-8 flex items-center gap-4">
+        <span className="text-[11px] tracking-widest text-faint">軽</span>
         <input
           type="range"
           min={0}
@@ -269,10 +290,10 @@ export function ExercisePanel({
           className="gauge flex-1"
           aria-label="疲労度"
         />
-        <span className="text-xs text-dim">重</span>
+        <span className="text-[11px] tracking-widest text-faint">重</span>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-8">
         {showComment ? (
           <textarea
             value={comment}
@@ -282,11 +303,15 @@ export function ExercisePanel({
             }}
             onBlur={flush}
             rows={3}
-            className="w-full rounded-xl bg-panel p-3 text-sm"
+            className="glass w-full resize-none rounded-[22px] p-4 text-sm leading-relaxed"
           />
         ) : (
-          <button onClick={() => setShowComment(true)} className="text-2xl text-dim" aria-label="コメント">
-            💬
+          <button
+            onClick={() => setShowComment(true)}
+            aria-label="コメント"
+            className="mx-auto flex h-11 w-11 items-center justify-center rounded-full text-faint active:bg-panel"
+          >
+            <Icon name="comment" />
           </button>
         )}
       </div>
