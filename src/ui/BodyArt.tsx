@@ -181,8 +181,8 @@ export function BodyArt({
         )
         .join('')
     }
-    if (still) draw(0)
-    else raf = requestAnimationFrame(draw)
+    // 最初の1枚はすぐ描く（タブが裏にあっても空白にしない）
+    draw(still ? 0 : performance.now())
     return () => cancelAnimationFrame(raf)
   }, [key, intensity, detail, animate]) // eslint-disable-line react-hooks/exhaustive-deps
 

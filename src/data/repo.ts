@@ -41,10 +41,12 @@ export const remove = (table: SyncTable, id: string) => patch(table, id, { delet
 
 // ---- 設定 ----
 
-export const DEFAULT_SETTINGS: Settings = { id: SETTINGS_ID, body_weight_kg: 70, ez_bar_kg: 10 }
+export const DEFAULT_SETTINGS: Settings = { id: SETTINGS_ID, body_weight_kg: 70, ez_bar_kg: 10, smith_bar_kg: 20 }
 
 export async function getSettings(): Promise<Settings> {
-  return (await db.settings.get(SETTINGS_ID)) ?? DEFAULT_SETTINGS
+  // 後から増えた項目は既定値で埋める
+  const s = await db.settings.get(SETTINGS_ID)
+  return { ...DEFAULT_SETTINGS, ...s, smith_bar_kg: s?.smith_bar_kg ?? DEFAULT_SETTINGS.smith_bar_kg }
 }
 
 // ---- 一覧 ----
@@ -175,7 +177,12 @@ export async function routineProfile(routineId: string): Promise<RoutineProfile>
     .filter((e): e is Exercise => !!e)
   const freq = new Map<BodyPart, number>()
   for (const e of exercises) if (e.body_part) freq.set(e.body_part, (freq.get(e.body_part) ?? 0) + 1)
-  const parts = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([p]) => p)
+  // メニューで対象部位を選んでいればそれを優先（種目が多い順）。なければ種目の部位から
+  const chosen = (await db.routines.get(routineId))?.body_parts ?? []
+  const parts = (chosen.length ? chosen.map((p) => [p, freq.get(p) ?? 0] as const) : [...freq.entries()])
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([p]) => p)
 
   // 「今これから行う」想定のセッションを基準に前回を探す
   const now: Session = {

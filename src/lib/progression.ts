@@ -6,6 +6,7 @@ const EPS = 1e-9
 export interface Ctx {
   bodyWeight: number
   ezBarKg: number
+  smithBarKg: number
 }
 
 export interface SetLike {
@@ -30,9 +31,11 @@ export interface Suggestion {
   increase: number
 }
 
-export function barWeight(eq: Equipment, ezBarKg: number): number {
+/** バー自体の重さ（記録する重量に含める） */
+export function barWeight(eq: Equipment, bars: Pick<Ctx, 'ezBarKg' | 'smithBarKg'>): number {
   if (eq === 'barbell') return BARBELL_KG
-  if (eq === 'ez') return ezBarKg
+  if (eq === 'ez') return bars.ezBarKg
+  if (eq === 'smith') return bars.smithBarKg
   return 0
 }
 
@@ -111,7 +114,7 @@ export function backoffWeight(ex: Exercise, mainWeight: number, ctx: Ctx): numbe
     return roundToStep(eff - ctx.bodyWeight, ex.weight_step)
   }
   const w = roundToStep(mainWeight * ex.backoff_ratio, ex.weight_step)
-  return Math.max(w, barWeight(ex.equipment, ctx.ezBarKg), ex.weight_step)
+  return Math.max(w, barWeight(ex.equipment, ctx), ex.weight_step)
 }
 
 /** 前回の種目ボリュームを上回るのに必要なバックオフ回数。計算不能なら null */

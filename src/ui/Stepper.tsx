@@ -14,7 +14,7 @@ export interface Editor {
   apply: (v: number) => void
 }
 
-function HoldButton({ onFire, children, className, label }: {
+export function HoldButton({ onFire, children, className, label }: {
   onFire: () => void
   children: React.ReactNode
   className?: string

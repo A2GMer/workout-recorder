@@ -65,9 +65,9 @@ export function ExercisePanel({
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [extra, setExtra] = useState(0)
   const bw = session.body_weight_kg
-  const ctx = { bodyWeight: bw, ezBarKg: settings.ez_bar_kg }
+  const ctx = { bodyWeight: bw, ezBarKg: settings.ez_bar_kg, smithBarKg: settings.smith_bar_kg }
   const sugg = suggest(ex, prev?.prev ?? null)
-  const bar = barWeight(ex.equipment, settings.ez_bar_kg)
+  const bar = barWeight(ex.equipment, ctx)
 
   // ---- 行の組み立て ----
   const mainSets = sets.filter((s) => s.kind === 'main')

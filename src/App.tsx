@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './data/supabase'
@@ -8,6 +8,9 @@ import SessionPage from './pages/SessionPage'
 import History from './pages/History'
 import SettingsPage from './pages/SettingsPage'
 import Login from './pages/Login'
+
+// 開発時だけ模様の一覧を見られるようにする（本番ビルドには含めない）
+const Patterns = import.meta.env.DEV ? lazy(() => import('./pages/Patterns')) : null
 
 export default function App() {
   const [auth, setAuth] = useState<Session | null | undefined>(supabase ? undefined : null)
@@ -31,6 +34,9 @@ export default function App() {
       <Route path="/s/:id" element={<SessionPage />} />
       <Route path="/history" element={<History />} />
       <Route path="/settings" element={<SettingsPage />} />
+      {Patterns && (
+        <Route path="/patterns" element={<Suspense><Patterns /></Suspense>} />
+      )}
     </Routes>
   )
 }

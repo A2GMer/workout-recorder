@@ -1,4 +1,4 @@
-export type Equipment = 'barbell' | 'ez' | 'dumbbell' | 'machine' | 'bodyweight'
+export type Equipment = 'barbell' | 'ez' | 'smith' | 'dumbbell' | 'machine' | 'bodyweight'
 export type SetKind = 'main' | 'backoff'
 export type BodyPart = 'chest' | 'back' | 'shoulders' | 'arms' | 'legs' | 'core'
 
@@ -21,6 +21,7 @@ export interface Synced {
 export interface Settings extends Synced {
   body_weight_kg: number
   ez_bar_kg: number
+  smith_bar_kg: number
 }
 
 export interface Exercise extends Synced {
@@ -38,6 +39,8 @@ export interface Exercise extends Synced {
 
 export interface Routine extends Synced {
   name: string
+  /** 対象部位（種目選択の絞り込みと模様に使う） */
+  body_parts?: BodyPart[] | null
   sort_order: number
 }
 
@@ -74,6 +77,7 @@ export interface WorkSet extends Synced {
 export const EQUIPMENT_LABEL: Record<Equipment, string> = {
   barbell: 'バーベル',
   ez: 'EZバー',
+  smith: 'スミス',
   dumbbell: 'ダンベル',
   machine: 'マシン',
   bodyweight: '自重',

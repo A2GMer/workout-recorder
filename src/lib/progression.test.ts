@@ -23,7 +23,7 @@ const bench: Exercise = {
   archived: false,
 }
 const pullup: Exercise = { ...bench, id: 'e2', name: '懸垂', equipment: 'bodyweight' }
-const ctx = { bodyWeight: 70, ezBarKg: 10 }
+const ctx = { bodyWeight: 70, ezBarKg: 10, smithBarKg: 20 }
 
 const sets = (w: number, ...reps: number[]) => reps.map((r) => ({ weight_kg: w, reps: r }))
 const prev = (p: Partial<PrevPerformance>): PrevPerformance => ({
