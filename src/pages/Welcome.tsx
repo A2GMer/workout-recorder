@@ -80,39 +80,59 @@ export default function Welcome() {
   return <HowTo onDone={done} />
 }
 
+/** 体重と身長。体重は自重種目のボリューム、身長はプロポーション目標の基準 */
 function BodyStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const settings = useLiveQuery(getSettings)
-  const value = useRef<number | null>(null)
+  const weight = useRef<number | null>(null)
+  const height = useRef<number | null>(null)
   if (!settings) return null
   const bw = Math.round(settings.body_weight_kg)
-  value.current = bw
-  const add = (d: number) => {
-    const v = Math.max(20, Math.min(250, (value.current ?? bw) + d))
-    value.current = v
+  weight.current = bw
+  height.current = settings.height_cm
+  const addWeight = (d: number) => {
+    const v = Math.max(20, Math.min(250, (weight.current ?? bw) + d))
+    weight.current = v
     void save<Settings>('settings', { ...settings, body_weight_kg: v })
+  }
+  const addHeight = (d: number) => {
+    const v = Math.max(100, Math.min(250, (height.current ?? 170) + d))
+    height.current = v
+    void save<Settings>('settings', { ...settings, height_cm: v })
   }
   return (
     <div className="flex h-full flex-col">
       <TopBar onBack={onBack} title="はじめに" sub="1 / 4" />
-      <Question sub="懸垂などの自重種目のボリューム計算に使います">体重は？</Question>
-      <div className="flex flex-1 items-center justify-center gap-6">
-        <HoldButton label="減らす" onFire={() => add(-1)} className="h-16 w-16 text-fg">
-          <Icon name="minus" size={26} />
-        </HoldButton>
-        <span className="w-32 text-center text-6xl">
-          {bw}
-          <span className="ml-1 text-base text-dim">kg</span>
-        </span>
-        <HoldButton label="増やす" onFire={() => add(1)} className="h-16 w-16 text-fg">
-          <Icon name="plus" size={26} />
-        </HoldButton>
+      <Question sub="体重は自重種目のボリュームに、身長は体のプロポーション目標に使います">体重と身長は？</Question>
+      <div className="flex flex-1 flex-col items-center justify-center gap-10">
+        <BigStepper label="体重" unit="kg" value={String(bw)} onAdd={addWeight} />
+        <BigStepper label="身長" unit="cm" value={settings.height_cm === null ? '—' : String(settings.height_cm)} onAdd={addHeight} />
       </div>
       <PrimaryButton onClick={onNext}>次へ</PrimaryButton>
     </div>
   )
 }
 
-/** 使い方（4枚）。図は実際の画面の部品と同じ見た目で描く */
+function BigStepper({ label, unit, value, onAdd }: { label: string; unit: string; value: string; onAdd: (d: number) => void }) {
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <span className="text-[11px] tracking-[0.2em] text-dim">{label}</span>
+      <div className="flex items-center justify-center gap-6">
+        <HoldButton label={`${label}を減らす`} onFire={() => onAdd(-1)} className="h-14 w-14 text-fg">
+          <Icon name="minus" size={24} />
+        </HoldButton>
+        <span className="w-32 text-center text-5xl">
+          {value}
+          <span className="ml-1 text-base text-dim">{unit}</span>
+        </span>
+        <HoldButton label={`${label}を増やす`} onFire={() => onAdd(1)} className="h-14 w-14 text-fg">
+          <Icon name="plus" size={24} />
+        </HoldButton>
+      </div>
+    </div>
+  )
+}
+
+/** 使い方（5枚）。図は実際の画面の部品と同じ見た目で描く */
 function HowTo({ onDone }: { onDone: () => void }) {
   const [i, setI] = useState(0)
   const slides = [
@@ -151,6 +171,18 @@ function HowTo({ onDone }: { onDone: () => void }) {
               <span key={d} className={`h-1.5 w-1.5 rounded-full ${d === 0 ? 'bg-fg' : 'bg-faint'}`} />
             ))}
           </div>
+        </div>
+      ),
+    },
+    {
+      title: '前に進んだことが見える',
+      body: '前回を超えた瞬間、数字がふくらみます。連続更新と自己ベストも残り、履歴の全身図では目標のプロポーションに足りない部位が分かります。',
+      art: (
+        <div className="flex flex-col items-center">
+          <span className="text-[56px] leading-none">2,138</span>
+          <span className="mt-2 text-xs text-fg">+38</span>
+          <span className="mt-1 text-[11px] text-dim">自己ベスト 105 · 2回連続で更新</span>
+          <div className="mt-4 h-px w-40 bg-fg" />
         </div>
       ),
     },

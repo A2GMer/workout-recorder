@@ -10,7 +10,7 @@ import {
   listSessions,
   localDate,
   routineProfile,
-  routineStreak,
+  routineSummary,
   sessionProgress,
   startSession,
 } from '../data/repo'
@@ -30,7 +30,7 @@ export default function Home() {
         ...r,
         last: await lastSessionOf(r.id),
         profile: await routineProfile(r.id),
-        streak: await routineStreak(r.id),
+        streak: (await routineSummary(r.id)).streak,
       })),
     )
   })

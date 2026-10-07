@@ -24,6 +24,8 @@ export interface Settings extends Synced {
   smith_bar_kg: number
   /** 計測を促す間隔（日） */
   measure_interval_days: number
+  /** 身長 cm。プロポーション目標の基準。未設定は null */
+  height_cm: number | null
 }
 
 export interface Exercise extends Synced {

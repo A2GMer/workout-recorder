@@ -1,6 +1,9 @@
 import { useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import type { AuthError } from '@supabase/supabase-js'
+import { journey } from '../data/repo'
 import { supabase } from '../data/supabase'
+import { fmtVolume } from '../lib/format'
 import { Icon, WaveArt } from '../ui/Icon'
 
 const EMAIL_KEY = 'login-email'
@@ -36,6 +39,8 @@ export default function Login() {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const signup = mode === 'signup'
+  // この端末に残っている積み上げ。ログインの前から「続きがある」ことを見せる
+  const built = useLiveQuery(journey)
 
   function remember() {
     try {
@@ -91,7 +96,16 @@ export default function Login() {
 
   return (
     <div className="safe-top flex min-h-full flex-col items-center justify-center px-8 pb-[env(safe-area-inset-bottom)]">
-      <WaveArt className="mb-10 h-44 w-auto text-fg" intensity={0.8} />
+      <WaveArt className="h-44 w-auto text-fg" intensity={0.8} />
+      <p className="mt-6 mb-8 h-5 text-center text-xs leading-5 text-dim">
+        {built ? (
+          <>
+            {built.sessions}回 · 累計 <span className="text-fg">{fmtVolume(built.volume)}</span>
+          </>
+        ) : (
+          '前回を、1kgでも超える。'
+        )}
+      </p>
       <form onSubmit={submit} className="flex w-full max-w-xs flex-col gap-3" noValidate>
         <input
           type="email"

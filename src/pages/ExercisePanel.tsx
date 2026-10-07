@@ -153,6 +153,12 @@ export function ExercisePanel({
   if (beat && run >= 2) marks.push(`${run}回連続で更新`)
   else if (!beat && run >= 1) marks.push(`${run}回連続更新中`)
 
+  // 次に記録するセット（提案どおり）で前回を超えるなら予告する
+  const nextRow = rows.find((r) => !r.rec)
+  const remaining = delta === null ? null : Math.max(1, -delta + 1)
+  const nextSetVolume = nextRow ? effectiveWeight(ex.equipment, nextRow.weight, bw) * nextRow.reps : 0
+  const nextBeats = !beat && remaining !== null && nextRow !== undefined && nextSetVolume >= remaining
+
   // ---- 操作 ----
   function setDraft(key: string, field: Field, v: number) {
     setDrafts((ds) => ({ ...ds, [key]: { ...ds[key], [field]: v } }))
@@ -224,7 +230,20 @@ export function ExercisePanel({
 
   const cell = (row: Row, field: Field) =>
     activeKey === `${se.id}:${row.key}:${field}` ? 'bg-chip text-fg' : ''
-  const progress = sugg.prevVolume ? Math.min(1, actual / sugg.prevVolume) : 0
+  // 進み具合の線。前回の位置に目盛りがあり、超えた分は目盛りの先へ伸びる（最大 +15%）
+  const OVER = 1.15
+  const progress = sugg.prevVolume ? Math.min(OVER, actual / sugg.prevVolume) : 0
+
+  // 疲労ゲージに応じた次回の提案（メインセットが全部記録されてから）
+  const mainDone = rows.filter((r) => r.kind === 'main').every((r) => r.rec)
+  const nextTime = mainDone
+    ? suggest(ex, {
+        main: sets.filter((s) => s.kind === 'main'),
+        backoff: sets.filter((s) => s.kind === 'backoff'),
+        fatigue,
+        body_weight_kg: bw,
+      })
+    : null
 
   function renderRow(row: Row) {
           const recorded = !!row.rec
@@ -283,12 +302,19 @@ export function ExercisePanel({
         <span className={`text-[56px] leading-none tracking-tight ${pulse ? 'animate-beat' : ''}`}>{fmtVolume(actual)}</span>
         {/* 前回比: 超えたら白で +N、まだなら「あと N」（前回 +1 まで） */}
         <span className={`mt-2 h-4 text-xs leading-4 ${beat ? 'text-fg' : 'text-dim'}`}>
-          {delta === null ? '' : beat ? `+${fmtVolume(delta)}` : `あと ${fmtVolume(Math.max(1, -delta + 1))}`}
+          {delta === null ? '' : beat ? `+${fmtVolume(delta)}` : `あと ${fmtVolume(remaining!)}`}
+          {nextBeats && <span className="text-fg">　次のセットで超える</span>}
         </span>
         <span className={`mt-1 h-4 text-[11px] leading-4 ${beat ? 'text-dim' : 'text-faint'}`}>{marks.join(' · ')}</span>
         {sugg.prevVolume !== null && (
-          <div className="mt-3 h-px w-40 bg-line">
-            <div className="h-px bg-fg transition-all duration-500" style={{ width: `${progress * 100}%` }} />
+          <div className="relative mt-3 h-3 w-48">
+            <div className="absolute top-1/2 h-px w-full bg-line" />
+            <div
+              className="absolute top-1/2 h-px bg-fg transition-all duration-500"
+              style={{ width: `${(progress / OVER) * 100}%` }}
+            />
+            {/* 前回の位置 */}
+            <div className={`absolute top-0 h-3 w-px ${beat ? 'bg-fg' : 'bg-dim'}`} style={{ left: `${(1 / OVER) * 100}%` }} />
           </div>
         )}
         <p className="mt-4 text-center text-xs leading-5 text-dim">
@@ -336,6 +362,14 @@ export function ExercisePanel({
         />
         <span className="text-xs text-dim">重</span>
       </div>
+      {/* ゲージを動かすと、次回の重量がその場で変わる。今日の全セットが次回を決める、が見える */}
+      <p className={`mt-3 h-4 text-center text-xs leading-4 ${nextTime?.achieved ? 'text-fg' : 'text-dim'}`}>
+        {nextTime === null || nextTime.mainWeight === null
+          ? ''
+          : nextTime.achieved
+            ? `次回 ${fmtWeight(ex.equipment, nextTime.mainWeight)} kg（+${num(nextTime.increase)}）`
+            : `次回 ${fmtWeight(ex.equipment, nextTime.mainWeight)} kg × ${nextTime.mainReps.join(',')}`}
+      </p>
 
       {/* コメント */}
       <div className="mt-8">

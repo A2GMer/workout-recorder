@@ -1,14 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate } from 'react-router-dom'
-import { getSettings, listExercises, listRoutines, patch, save } from '../data/repo'
+import {
+  exerciseSummary,
+  getSettings,
+  journey,
+  listExercises,
+  listRoutines,
+  patch,
+  routineSummary,
+  save,
+  type ExerciseSummary,
+} from '../data/repo'
 import { supabase } from '../data/supabase'
 import { BODY_PART_LABEL, EQUIPMENT_LABEL, type BodyPart, type Equipment, type Exercise, type Settings } from '../lib/types'
 import { Icon } from '../ui/Icon'
 import { BodyArt } from '../ui/BodyArt'
 import { TopBar } from '../ui/TopBar'
 import { HoldButton } from '../ui/Stepper'
-import { num } from '../lib/format'
+import { fmtWeight, md, num } from '../lib/format'
 import { fix } from '../lib/progression'
 
 const inputCls = 'h-11 rounded-xl bg-chip px-4 placeholder:text-faint'
@@ -134,28 +144,52 @@ const AddButton = ({ onClick, label }: { onClick: () => void; label: string }) =
 )
 
 export default function SettingsPage() {
-  const data = useLiveQuery(async () => ({
-    settings: await getSettings(),
-    exercises: await listExercises(),
-    routines: await listRoutines(),
-  }))
+  const data = useLiveQuery(async () => {
+    const exercises = await listExercises()
+    const routines = await listRoutines()
+    return {
+      settings: await getSettings(),
+      exercises,
+      routines,
+      // 歩み: 種目ごとの最大重量と伸び、メニューごとの回数と連続更新、はじめてからの日数
+      exerciseSummaries: new Map(await Promise.all(exercises.map(async (e) => [e.id, await exerciseSummary(e)] as const))),
+      routineSummaries: new Map(await Promise.all(routines.map(async (r) => [r.id, await routineSummary(r.id)] as const))),
+      journey: await journey(),
+    }
+  })
   const nav = useNavigate()
   const [open, setOpen] = useState<string | null>(null)
   if (!data) return null
-  const { settings, exercises, routines } = data
+  const { settings, exercises, routines, exerciseSummaries, routineSummaries } = data
 
   const saveSettings = (c: Partial<Settings>) => save<Settings>('settings', { ...settings, ...c })
 
-
   return (
     <div className="flex min-h-full flex-col">
-      <TopBar back="/" title="設定" />
+      <TopBar
+        back="/"
+        title="設定"
+        sub={data.journey ? `${md(data.journey.firstDate)} から ${data.journey.days}日 ・ ${data.journey.sessions}回` : undefined}
+      />
       <main className="flex flex-col gap-8 px-5 pt-2 pb-[calc(env(safe-area-inset-bottom)+4rem)]">
         <Section title="BODY">
           <div className="flex flex-col rounded-2xl bg-panel px-5 py-1">
             <StepField label="体重" unit="kg" step={1} min={20} max={250} value={Math.round(settings.body_weight_kg)} onChange={(v) => saveSettings({ body_weight_kg: v })} />
+            <StepField
+              label="身長"
+              unit="cm"
+              step={1}
+              min={100}
+              max={250}
+              value={settings.height_cm ?? 170}
+              format={(v) => (settings.height_cm === null ? '—' : num(v))}
+              onChange={(v) => saveSettings({ height_cm: v })}
+            />
             <StepField label="EZバー" unit="kg" step={0.5} min={0} value={settings.ez_bar_kg} onChange={(v) => saveSettings({ ez_bar_kg: v })} />
             <StepField label="スミスバー" unit="kg" step={0.5} min={0} value={settings.smith_bar_kg} onChange={(v) => saveSettings({ smith_bar_kg: v })} />
+            {settings.height_cm === null && (
+              <p className="pb-2 text-xs leading-5 text-faint">身長を入れると、履歴に体のプロポーション目標が出ます</p>
+            )}
             <div className="flex h-14 items-center justify-between gap-3">
               <span className="text-sm text-dim">計測の間隔</span>
               <span className="flex gap-1 rounded-xl bg-chip p-1">
@@ -175,24 +209,41 @@ export default function SettingsPage() {
         </Section>
 
         <Section title="MENU">
-          {routines.map((r) => (
-            <button
-              key={r.id}
-              onClick={() => nav(`/menu/${r.id}`)}
-              className="flex h-16 items-center gap-3 rounded-2xl bg-panel px-5 text-left"
-            >
-              <span className="min-w-0 flex-1 truncate">{r.name}</span>
-              <Icon name="back" size={18} className="shrink-0 rotate-180 text-faint" />
-            </button>
-          ))}
+          {routines.map((r) => {
+            const s = routineSummaries.get(r.id)
+            return (
+              <button
+                key={r.id}
+                onClick={() => nav(`/menu/${r.id}`)}
+                className="flex h-16 items-center gap-3 rounded-2xl bg-panel px-5 text-left"
+              >
+                <span className="min-w-0 flex-1 truncate">{r.name}</span>
+                {/* 積み上げ: 回数と、全種目で前回を超え続けている回数 */}
+                {s && s.sessions > 0 && (
+                  <span className="shrink-0 text-xs text-dim">
+                    {s.sessions}回{s.streak > 0 && <span className="text-fg"> · {s.streak}連続更新</span>}
+                  </span>
+                )}
+                <Icon name="back" size={18} className="shrink-0 rotate-180 text-faint" />
+              </button>
+            )
+          })}
           <AddButton onClick={() => nav('/menu/new')} label="メニュー作成" />
         </Section>
 
         <Section title="EXERCISE">
           {exercises.map((e) => (
-            <ExerciseEditor key={e.id} ex={e} open={open === e.id} toggle={() => setOpen(open === e.id ? null : e.id)} />
+            <ExerciseEditor
+              key={e.id}
+              ex={e}
+              summary={exerciseSummaries.get(e.id)}
+              open={open === e.id}
+              toggle={() => setOpen(open === e.id ? null : e.id)}
+            />
           ))}
-          <p className="px-2 text-xs leading-5 text-faint">種目はメニュー作成の中で追加します</p>
+          <p className="px-2 text-xs leading-5 text-faint">
+            右は今の最大重量と、初回からの伸び。種目はメニュー作成の中で追加します
+          </p>
         </Section>
 
         <button onClick={() => nav('/welcome?howto')} className="mx-auto h-11 px-6 text-sm text-dim">
@@ -209,13 +260,39 @@ export default function SettingsPage() {
   )
 }
 
-function Row({ title, meta, open, toggle }: { title: string; meta: React.ReactNode; open: boolean; toggle: () => void }) {
+function Row({ title, meta, right, open, toggle }: {
+  title: string
+  meta: React.ReactNode
+  right?: React.ReactNode
+  open: boolean
+  toggle: () => void
+}) {
   return (
     <button onClick={toggle} className="flex h-16 w-full items-center gap-3 px-5 text-left">
-      <span className="min-w-0 flex-1 truncate">{title}</span>
-      <span className="shrink-0 text-xs text-faint">{meta}</span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate">{title}</span>
+        <span className="truncate text-[11px] leading-4 text-faint">{meta}</span>
+      </span>
+      {right}
       <Icon name={open ? 'up' : 'down'} size={18} className="shrink-0 text-faint" />
     </button>
+  )
+}
+
+/** 種目の歩み: 今の最大重量を大きく、初回からの伸びを小さく。自己ベスト一覧として読める */
+function Gain({ ex, s }: { ex: Exercise; s?: ExerciseSummary }) {
+  if (!s || s.topWeight === null) return null
+  return (
+    <span className="flex shrink-0 flex-col items-end">
+      <span className="text-lg leading-none">
+        {fmtWeight(ex.equipment, s.topWeight)}
+        <span className="ml-0.5 text-[11px] text-faint">kg</span>
+      </span>
+      <span className={`mt-1 text-[11px] leading-none ${s.gain && s.gain > 0 ? 'text-fg' : 'text-faint'}`}>
+        {s.gain && s.gain > 0 ? `+${num(s.gain)}` : s.streak > 0 ? `${s.streak}連続更新` : `${s.sessions}回`}
+        {s.gain && s.gain > 0 && s.streak > 0 ? ` · ${s.streak}連続更新` : ''}
+      </span>
+    </span>
   )
 }
 
@@ -227,13 +304,19 @@ function DeleteButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-function ExerciseEditor({ ex, open, toggle }: { ex: Exercise; open: boolean; toggle: () => void }) {
+function ExerciseEditor({ ex, summary, open, toggle }: {
+  ex: Exercise
+  summary?: ExerciseSummary
+  open: boolean
+  toggle: () => void
+}) {
   const set = (c: Partial<Exercise>) => patch<Exercise>('exercises', ex.id, c)
   return (
     <div className="rounded-2xl bg-panel">
       <Row
         title={ex.name}
         meta={`${ex.body_part ? BODY_PART_LABEL[ex.body_part] + '  ' : ''}${EQUIPMENT_LABEL[ex.equipment]}  ${ex.target_reps}×${ex.main_sets}${ex.pyramid ? '+B' : ''}`}
+        right={<Gain ex={ex} s={summary} />}
         open={open}
         toggle={toggle}
       />

@@ -97,6 +97,15 @@ export default function SessionPage() {
 
   const total = panels.length + 1
   const current = panels[page]
+  // 前回を超えた種目のドットは白く灯る。進むほど灯りが増える
+  const beaten = panels.map((p) => {
+    if (!p.sets.length) return false
+    const actual = volume(p.sets, p.ex.equipment, session.body_weight_kg)
+    const prevVolume = p.prev
+      ? volume([...p.prev.prev.main, ...p.prev.prev.backoff], p.ex.equipment, p.prev.session.body_weight_kg)
+      : null
+    return progressOf(p.sets, actual, prevVolume, p.history).beat
+  })
   const title = current ? current.ex.name : '今日'
   const sub = current
     ? `${current.ex.target_reps}回 × ${current.ex.main_sets}${current.ex.pyramid ? ' + B' : ''}`
@@ -157,7 +166,11 @@ export default function SessionPage() {
               aria-label={`${i + 1}`}
               className="flex h-10 w-9 items-center justify-center"
             >
-              <span className={`block h-1.5 w-1.5 rounded-full transition ${i === page ? 'bg-fg' : 'bg-faint'}`} />
+              <span
+                className={`block rounded-full transition ${
+                  i === page ? 'h-2 w-2 bg-fg' : beaten[i] ? 'h-1.5 w-1.5 bg-fg' : 'h-1.5 w-1.5 bg-faint'
+                }`}
+              />
             </button>
           ))}
         </div>

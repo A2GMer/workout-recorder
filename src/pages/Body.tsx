@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate } from 'react-router-dom'
-import { getSettings, listMeasurements, saveMeasurement, trainingSince } from '../data/repo'
+import { getSettings, listMeasurements, localDate, saveMeasurement, trainingSince } from '../data/repo'
 import { md, num } from '../lib/format'
+import { idealTargets, type Target } from '../lib/ideal'
 import { bodySummary, isAtBest, nextMeasureDate } from '../lib/measure'
 import { fix } from '../lib/progression'
-import { MEASURE_ITEMS, measureLabel, type MeasureKey, type Measurement } from '../lib/types'
+import { GROWTH_KEYS, MEASURE_ITEMS, measureLabel, type MeasureKey, type Measurement } from '../lib/types'
 import { PrimaryButton } from '../ui/Flow'
 import { Sparkline } from '../ui/Sparkline'
 import { Stepper, type Editor } from '../ui/Stepper'
@@ -40,6 +41,7 @@ export default function Body() {
   const next = nextMeasureDate(latest?.date ?? null, settings.measure_interval_days)
   const hasHistory = list.length > 1
   const summary = bodySummary(list)
+  const targets = idealTargets(latest ?? null, settings.height_cm)
 
   return (
     <div className="flex h-full flex-col">
@@ -103,7 +105,7 @@ export default function Body() {
                       <span className="w-16 text-right text-xs">{prev && <Delta value={diff(latest[k], prev[k])} />}</span>
                       <span className="w-16 text-right text-xs">{list.length > 2 && <Delta value={diff(latest[k], first[k])} />}</span>
                     </button>
-                    {isOpen && <Trend list={list} k={k} unit={item.unit} />}
+                    {isOpen && <Trend list={list} k={k} unit={item.unit} target={targets?.find((t) => t.key === k) ?? null} />}
                   </div>
                 )
               }),
@@ -119,13 +121,27 @@ export default function Body() {
   )
 }
 
-/** 1項目の推移: 折れ線 + 計測ごとの値（古い → 新しい） */
-function Trend({ list, k, unit }: { list: Measurement[]; k: MeasureKey; unit: string }) {
+/** 1項目の推移: 折れ線 + 計測ごとの値（古い → 新しい）+ プロポーション目標 */
+function Trend({ list, k, unit, target }: { list: Measurement[]; k: MeasureKey; unit: string; target: Target | null }) {
   // 値のある計測だけ、古い順に
   const points = [...list].reverse().flatMap((m) => (m[k] == null ? [] : [{ date: m.date, value: m[k] }]))
-  if (points.length < 2) return <p className="pb-4 text-xs text-faint">まだ比べられる記録がありません</p>
+  const goal =
+    target && target.gap !== null ? (
+      <p className={`pb-3 text-xs ${target.gap >= 0.5 ? 'text-dim' : 'text-fg'}`}>
+        目標 {num(target.target)} {unit}
+        {target.gap >= 0.5 ? ` · あと ${num(target.gap)}` : ' · 届いています'}
+      </p>
+    ) : null
+  if (points.length < 2)
+    return (
+      <div className="pb-1">
+        {goal}
+        <p className="pb-4 text-xs text-faint">まだ比べられる記録がありません</p>
+      </div>
+    )
   return (
     <div className="pb-4">
+      {goal}
       <Sparkline values={points.map((p) => p.value)} className="mt-1 w-full text-fg" />
       <div className="no-scrollbar mt-3 flex gap-5 overflow-x-auto">
         {points.map((p, i) => {
@@ -150,13 +166,23 @@ function Trend({ list, k, unit }: { list: Measurement[]; k: MeasureKey; unit: st
 /** /body/measure: 前回の値から始めて、変わった項目だけタップで増減 */
 export function Measure() {
   const nav = useNavigate()
-  const latest = useLiveQuery(async () => (await listMeasurements())[0] ?? null)
+  const data = useLiveQuery(async () => ({ list: await listMeasurements(), settings: await getSettings() }))
   const [values, setValues] = useState<Partial<Record<MeasureKey, number>>>({})
   const [editor, setEditor] = useState<Editor | null>(null)
   const [busy, setBusy] = useState(false)
-  if (latest === undefined) return null
+  if (data === undefined) return null
+  const { list, settings } = data
+  const latest: Measurement | null = list[0] ?? null
+  const targets = idealTargets(latest, settings.height_cm)
 
   const value = (k: MeasureKey) => values[k] ?? latest?.[k] ?? null
+
+  // 入力中の値で「前回より大きい」「今が過去いちばん」を数える（変えた項目だけ）
+  const draft = { ...(latest ?? {}), ...values, date: localDate() } as Measurement
+  const changedKeys = (Object.keys(values) as MeasureKey[]).filter((k) => values[k] !== latest?.[k])
+  const grown = changedKeys.filter((k) => GROWTH_KEYS.includes(k) && latest?.[k] != null && values[k]! > latest[k]!).length
+  const atBest = (k: MeasureKey) => values[k] !== undefined && isAtBest([draft, ...list], k) === true
+  const bests = changedKeys.filter(atBest).length
 
   function edit(k: MeasureKey, unit: 'kg' | 'cm', label: string) {
     const isKg = unit === 'kg'
@@ -185,13 +211,28 @@ export function Measure() {
     <div className="flex h-full flex-col">
       <TopBar onBack={() => nav(-1)} title="計測" sub={latest ? `前回 ${md(latest.date)} の値から` : undefined} />
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-5 pb-56">
-        {MEASURE_ITEMS.map((item) => (
+        {/* 入力しながら前進が見える: 前回より大きくなった数と、今が過去いちばんの数 */}
+        <p className={`h-8 text-center text-xs leading-8 ${grown || bests ? 'text-fg' : 'text-faint'}`}>
+          {changedKeys.length === 0
+            ? latest
+              ? '変わった項目だけ変えてください'
+              : ''
+            : [grown ? `前回より大きく ${grown}` : '', bests ? `今が最大 ${bests}` : ''].filter(Boolean).join(' · ') ||
+              `${changedKeys.length} 項目を変更`}
+        </p>
+        {MEASURE_ITEMS.map((item) => {
+          const target = targets?.find((t) => item.keys.includes(t.key))
+          return (
           <div key={item.label} className="flex h-16 items-center border-b border-line">
-            <span className="min-w-0 flex-1 truncate text-sm text-dim">{item.label}</span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-sm text-dim">{item.label}</span>
+              {target && <span className="text-[10px] leading-4 text-faint">目標 {num(target.target)}</span>}
+            </span>
             {item.keys.map((k, i) => {
               const v = value(k)
               const changed = values[k] !== undefined && values[k] !== latest?.[k]
               const active = editor?.key === k
+              const best = changed && atBest(k)
               return (
                 <button
                   key={k}
@@ -206,12 +247,14 @@ export function Measure() {
                   </span>
                   <span className="mt-1 h-3 text-[10px] leading-none">
                     {changed && latest?.[k] != null ? <Delta value={diff(v, latest[k])} /> : null}
+                    {best && <span className="ml-1 text-fg">最大</span>}
                   </span>
                 </button>
               )
             })}
           </div>
-        ))}
+          )
+        })}
       </div>
       {editor ? (
         <Stepper
