@@ -128,6 +128,16 @@ export function backoffWeight(ex: Exercise, mainWeight: number, ctx: Ctx): numbe
   return Math.max(w, barWeight(ex.equipment, ctx), ex.weight_step)
 }
 
+/**
+ * 連続で前回を上回った回数。volumes は新しい順（[今回, 前回, 前々回, …]）。
+ * 先頭から「次より大きい」が続く数。比べる相手がなければ 0
+ */
+export function streak(volumes: number[]): number {
+  let n = 0
+  while (n + 1 < volumes.length && volumes[n] > volumes[n + 1] + EPS) n++
+  return n
+}
+
 /** 前回の種目ボリュームを上回るのに必要なバックオフ回数。計算不能なら null */
 export function neededBackoffReps(
   prevVolume: number | null,

@@ -1,7 +1,19 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
-import { getSettings, lastSessionOf, listMeasurements, listRoutines, localDate, routineProfile, startSession } from '../data/repo'
+import {
+  allImproved,
+  getSettings,
+  lastSessionOf,
+  listMeasurements,
+  listRoutines,
+  listSessions,
+  localDate,
+  routineProfile,
+  routineStreak,
+  sessionProgress,
+  startSession,
+} from '../data/repo'
 import { isMeasureDue } from '../lib/measure'
 import { md } from '../lib/format'
 import { BodyArt } from '../ui/BodyArt'
@@ -14,8 +26,20 @@ export default function Home() {
   const routines = useLiveQuery(async () => {
     const rs = await listRoutines()
     return Promise.all(
-      rs.map(async (r) => ({ ...r, last: await lastSessionOf(r.id), profile: await routineProfile(r.id) })),
+      rs.map(async (r) => ({
+        ...r,
+        last: await lastSessionOf(r.id),
+        profile: await routineProfile(r.id),
+        streak: await routineStreak(r.id),
+      })),
     )
+  })
+
+  // 直近のセッションの連なり（古い → 新しい）。全種目で前回を超えた回は塗りつぶし
+  const chain = useLiveQuery(async () => {
+    const recent = (await listSessions()).slice(0, CHAIN_LENGTH)
+    const results = await Promise.all(recent.map(async (s) => ({ s, p: await sessionProgress(s) })))
+    return results.filter((r) => r.p.compared > 0).reverse()
   })
 
   const measureDue = useLiveQuery(async () => {
@@ -90,9 +114,26 @@ export default function Home() {
           <span className="flex flex-col items-center gap-1">
             <span className="text-[11px] tracking-[0.2em] text-dim">NEXT</span>
             <span className="text-lg">{next.name}</span>
+            {/* 今日の見どころ: 重量が上がる種目数と、守っている連続更新 */}
+            <span className="h-4 text-[11px] leading-4 text-dim">{outlook(next.profile.weightUps, next.streak)}</span>
           </span>
         )}
       </button>
+
+      {chain && chain.length > 0 && (
+        <button
+          onClick={() => nav('/history')}
+          aria-label={`直近 ${chain.length} 回のうち、全種目で前回を超えた回 ${chain.filter((c) => allImproved(c.p)).length}`}
+          className="mx-auto flex h-10 shrink-0 items-center gap-2.5 px-4"
+        >
+          {chain.map(({ s, p }) => (
+            <span
+              key={s.id}
+              className={`block h-2 w-2 rounded-full ${allImproved(p) ? 'bg-fg' : p.improved > 0 ? 'border border-dim' : 'border border-faint'}`}
+            />
+          ))}
+        </button>
+      )}
 
       <nav className="no-scrollbar flex shrink-0 snap-x gap-2 overflow-x-auto px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+2rem)]">
         {routines?.map((r) => (
@@ -121,6 +162,17 @@ export default function Home() {
       </nav>
     </div>
   )
+}
+
+/** ホーム下部の連なりに出す直近セッション数 */
+const CHAIN_LENGTH = 12
+
+/** NEXT の下の一言。何もなければ空（初回など） */
+function outlook(weightUps: number, streak: number): string {
+  const marks: string[] = []
+  if (weightUps > 0) marks.push(`重量アップ ${weightUps} 種目`)
+  if (streak > 0) marks.push(`${streak}回連続更新中`)
+  return marks.join(' · ')
 }
 
 // 計測のお知らせを「今日は表示しない」にした日

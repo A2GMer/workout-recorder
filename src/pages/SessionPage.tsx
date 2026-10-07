@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useParams } from 'react-router-dom'
 import { db } from '../data/db'
 import {
+  exerciseHistory,
   getSettings,
   listExercises,
   patch,
@@ -12,12 +13,13 @@ import {
   setsOf,
   uuid,
 } from '../data/repo'
-import { md, num } from '../lib/format'
+import { fmtVolume, md, num } from '../lib/format'
+import { fix, volume } from '../lib/progression'
 import type { Session, SessionExercise, Settings } from '../lib/types'
 import { Stepper, type Editor } from '../ui/Stepper'
 import { TopBar } from '../ui/TopBar'
 import { Icon } from '../ui/Icon'
-import { ExercisePanel, type PanelData } from './ExercisePanel'
+import { ExercisePanel, progressOf, type PanelData } from './ExercisePanel'
 
 export default function SessionPage() {
   const { id } = useParams()
@@ -32,7 +34,13 @@ export default function SessionPage() {
     for (const se of ses) {
       const ex = byId.get(se.exercise_id)
       if (!ex) continue
-      panels.push({ se, ex, sets: await setsOf(se.id), prev: await previousPerformance(ex.id, session) })
+      panels.push({
+        se,
+        ex,
+        sets: await setsOf(se.id),
+        prev: await previousPerformance(ex.id, session),
+        history: await exerciseHistory(ex, session),
+      })
     }
     const unused = exercises.filter((e) => !e.archived && !ses.some((s) => s.exercise_id === e.id))
     return { session, settings, panels, unused }
@@ -89,7 +97,7 @@ export default function SessionPage() {
 
   const total = panels.length + 1
   const current = panels[page]
-  const title = current ? current.ex.name : '種目を追加'
+  const title = current ? current.ex.name : '今日'
   const sub = current
     ? `${current.ex.target_reps}回 × ${current.ex.main_sets}${current.ex.pyramid ? ' + B' : ''}`
     : md(session.date)
@@ -124,6 +132,10 @@ export default function SessionPage() {
           />
         ))}
         <section className="no-scrollbar flex h-full w-full shrink-0 grow-0 basis-full flex-col overflow-y-auto px-5 pt-4 pb-56 [&>*]:shrink-0">
+          <TodaySummary panels={panels} session={session} />
+          {unused.length > 0 && (
+            <span className="mt-8 border-b border-line pb-2 text-[11px] tracking-[0.15em] text-dim">ADD</span>
+          )}
           {unused.map((e) => (
             <button
               key={e.id}
@@ -160,6 +172,52 @@ export default function SessionPage() {
           onClose={() => setEditor(null)}
         />
       )}
+    </div>
+  )
+}
+
+/**
+ * 最後のパネルの「今日のまとめ」。終了ボタンの代わりに、ここまでの到達点を一目で。
+ * 合計ボリューム / 前回比（前回と比べられる種目の合計）/ 更新した種目数 / 自己ベスト数
+ */
+function TodaySummary({ panels, session }: { panels: PanelData[]; session: Session }) {
+  const bw = session.body_weight_kg
+  let total = 0
+  let actualCompared = 0
+  let prevCompared = 0
+  let compared = 0
+  let improved = 0
+  let bests = 0
+  let recorded = 0
+  for (const p of panels) {
+    if (!p.sets.length) continue
+    recorded += p.sets.length
+    const actual = volume(p.sets, p.ex.equipment, bw)
+    total += actual
+    const prevVolume = p.prev ? volume([...p.prev.prev.main, ...p.prev.prev.backoff], p.ex.equipment, p.prev.session.body_weight_kg) : null
+    const { beat, isBest } = progressOf(p.sets, actual, prevVolume, p.history)
+    if (prevVolume !== null) {
+      compared++
+      actualCompared += actual
+      prevCompared += prevVolume
+      if (beat) improved++
+    }
+    if (isBest) bests++
+  }
+  if (!recorded) return null
+  const delta = fix(actualCompared - prevCompared)
+  const allBeat = compared > 0 && improved === compared
+  const marks: string[] = []
+  if (compared) marks.push(`更新 ${improved}/${compared} 種目`)
+  if (bests) marks.push(`自己ベスト ${bests}`)
+  return (
+    <div className="flex flex-col items-center border-b border-line pb-8">
+      <span className="text-[11px] tracking-[0.2em] text-dim">TODAY</span>
+      <span className="mt-3 text-[56px] leading-none tracking-tight">{fmtVolume(total)}</span>
+      <span className={`mt-2 h-4 text-xs leading-4 ${delta > 0 ? 'text-fg' : 'text-dim'}`}>
+        {compared ? (delta > 0 ? `+${fmtVolume(delta)}` : `あと ${fmtVolume(Math.max(1, -delta + 1))}`) : ''}
+      </span>
+      <span className={`mt-1 h-4 text-[11px] leading-4 ${allBeat ? 'text-fg' : 'text-dim'}`}>{marks.join(' · ')}</span>
     </div>
   )
 }

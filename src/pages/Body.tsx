@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate } from 'react-router-dom'
-import { getSettings, listMeasurements, saveMeasurement } from '../data/repo'
+import { getSettings, listMeasurements, saveMeasurement, trainingSince } from '../data/repo'
 import { md, num } from '../lib/format'
-import { nextMeasureDate } from '../lib/measure'
+import { bodySummary, isAtBest, nextMeasureDate } from '../lib/measure'
 import { fix } from '../lib/progression'
-import { MEASURE_ITEMS, type MeasureKey, type Measurement } from '../lib/types'
+import { MEASURE_ITEMS, measureLabel, type MeasureKey, type Measurement } from '../lib/types'
 import { PrimaryButton } from '../ui/Flow'
 import { Sparkline } from '../ui/Sparkline'
 import { Stepper, type Editor } from '../ui/Stepper'
@@ -23,14 +23,23 @@ const diff = (a?: number | null, b?: number | null) => (a == null || b == null ?
 /** /body: 最新の計測と、前回・初回からの変化。行をタップでその項目の推移 */
 export default function Body() {
   const nav = useNavigate()
-  const data = useLiveQuery(async () => ({ list: await listMeasurements(), settings: await getSettings() }))
+  const data = useLiveQuery(async () => {
+    const list = await listMeasurements()
+    return {
+      list,
+      settings: await getSettings(),
+      // 最後の計測からの積み上げ（次の計測で見えるはずのもの）
+      since: list[0] ? await trainingSince(list[0].date) : null,
+    }
+  })
   const [open, setOpen] = useState<MeasureKey | null>(null)
   if (!data) return null
-  const { list, settings } = data
+  const { list, settings, since } = data
   const [latest, prev] = list
   const first = list[list.length - 1]
   const next = nextMeasureDate(latest?.date ?? null, settings.measure_interval_days)
   const hasHistory = list.length > 1
+  const summary = bodySummary(list)
 
   return (
     <div className="flex h-full flex-col">
@@ -38,6 +47,32 @@ export default function Body() {
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-5 pb-6">
         {latest && (
           <>
+            {/* 前進のまとめ: 初回からいちばん伸びた部位を大きく。下に伸びた項目数と、今が最大の項目数 */}
+            {hasHistory && summary.total > 0 && (
+              <div className="flex flex-col items-center pt-4 pb-8">
+                <span className="text-[11px] tracking-[0.2em] text-dim">SINCE {md(first.date)}</span>
+                {summary.top ? (
+                  <span className="mt-3 flex items-baseline gap-2">
+                    <span className="text-base text-dim">{measureLabel(summary.top.key)}</span>
+                    <span className="text-[44px] leading-none tracking-tight">+{num(summary.top.delta)}</span>
+                    <span className="text-xs text-dim">cm</span>
+                  </span>
+                ) : (
+                  <span className="mt-3 text-[44px] leading-none tracking-tight text-dim">—</span>
+                )}
+                <span className="mt-3 text-xs text-dim">
+                  大きくなった {summary.grown}/{summary.total} 項目
+                  {summary.atBest > 0 && <span className="text-fg"> · 今が最大 {summary.atBest}</span>}
+                </span>
+              </div>
+            )}
+            {/* 最後の計測からの努力量。次の計測への期待 */}
+            {since && since.sessions > 0 && (
+              <p className={`${hasHistory && summary.total > 0 ? '' : 'pt-4 '}pb-6 text-center text-xs text-dim`}>
+                前回の計測から {since.sessions}回
+                {since.compared > 0 && ` · 更新 ${since.improved}/${since.compared} 種目`}
+              </p>
+            )}
             <div className="flex h-10 items-end border-b border-line pb-2 text-[11px] tracking-[0.15em] text-dim">
               <span className="flex-1" />
               <span className="w-16 text-right">NOW</span>
@@ -47,6 +82,9 @@ export default function Body() {
             {MEASURE_ITEMS.map((item) =>
               item.keys.map((k, i) => {
                 const isOpen = open === k
+                // 今が過去いちばんなら NOW を白く、そうでなければ少し落とす（体重は判定せず白）
+                const best = isAtBest(list, k)
+                const nowTone = best === false ? 'text-dim' : 'text-fg'
                 return (
                   <div key={k} className="border-b border-line">
                     <button
@@ -58,7 +96,7 @@ export default function Body() {
                         {i === 0 ? item.label : ''}
                         {item.keys.length > 1 && <span className="ml-2 text-faint">{SIDE[i]}</span>}
                       </span>
-                      <span className={`w-16 text-right text-base ${isOpen ? 'text-fg' : ''}`}>
+                      <span className={`w-16 text-right text-base ${isOpen ? 'text-fg' : nowTone}`}>
                         {latest[k] ?? '—'}
                         <span className="ml-0.5 text-[10px] text-faint">{item.unit}</span>
                       </span>
@@ -71,7 +109,7 @@ export default function Body() {
               }),
             )}
             <p className="mt-3 text-xs leading-5 text-faint">
-              中央の列は前回から、右の列は初回からの変化{hasHistory ? '。行をタップで推移' : ''}
+              中央の列は前回から、右の列は初回からの変化{hasHistory ? '。白い値は今が過去いちばん。行をタップで推移' : ''}
             </p>
           </>
         )}

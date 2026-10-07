@@ -13,7 +13,7 @@ import type {
   Synced,
   WorkSet,
 } from '../lib/types'
-import { challenge, type PrevPerformance } from '../lib/progression'
+import { challenge, suggest, volume, type PrevPerformance } from '../lib/progression'
 import { exerciseDefaults, PRESETS } from '../lib/presets'
 
 export const uuid = () => crypto.randomUUID()
@@ -112,21 +112,26 @@ export async function setsOf(sessionExerciseId: string): Promise<WorkSet[]> {
     .sort((a, b) => a.set_no - b.set_no)
 }
 
-/** 指定セッションより前で、その種目を行った直近の実績 */
-export async function previousPerformance(
-  exerciseId: string,
-  current: Session,
-): Promise<{ prev: PrevPerformance; session: Session } | null> {
+/** 指定セッションより前に、その種目を行った回（新しい順） */
+async function pastOccurrences(exerciseId: string, current: Session): Promise<{ se: SessionExercise; s: Session }[]> {
   const ses = (await db.session_exercises.where('exercise_id').equals(exerciseId).toArray()).filter(
     alive,
   )
   const sessions = (await db.sessions.bulkGet(ses.map((s) => s.session_id))).map((s) =>
     alive(s) && s.id !== current.id && isBefore(s, current) ? s : undefined,
   )
-  const candidates = ses
+  return ses
     .map((se, i) => ({ se, s: sessions[i] }))
     .filter((x): x is { se: SessionExercise; s: Session } => !!x.s)
     .sort((a, b) => bySessionDesc(a.s, b.s))
+}
+
+/** 指定セッションより前で、その種目を行った直近の実績 */
+export async function previousPerformance(
+  exerciseId: string,
+  current: Session,
+): Promise<{ prev: PrevPerformance; session: Session } | null> {
+  const candidates = await pastOccurrences(exerciseId, current)
   for (const { se, s } of candidates) {
     const sets = await setsOf(se.id)
     if (!sets.length) continue // 記録なしはスキップ
@@ -141,6 +146,31 @@ export async function previousPerformance(
     }
   }
   return null
+}
+
+export interface ExerciseLog {
+  session: Session
+  /** その回の種目ボリューム（メイン + バックオフ） */
+  volume: number
+  /** その回のメインセット最大重量 */
+  maxWeight: number
+}
+
+/** 指定セッションより前の、その種目の実績一覧（新しい順・記録なしは除く）。連続更新や自己ベストの計算に使う */
+export async function exerciseHistory(ex: Exercise, current: Session, limit = 60): Promise<ExerciseLog[]> {
+  const out: ExerciseLog[] = []
+  for (const { se, s } of await pastOccurrences(ex.id, current)) {
+    const sets = await setsOf(se.id)
+    if (!sets.length) continue
+    const main = sets.filter((x) => x.kind === 'main')
+    out.push({
+      session: s,
+      volume: volume(sets, ex.equipment, s.body_weight_kg),
+      maxWeight: main.length ? Math.max(...main.map((x) => x.weight_kg)) : -Infinity,
+    })
+    if (out.length >= limit) break
+  }
+  return out
 }
 
 // ---- セッション開始 ----
@@ -279,6 +309,68 @@ export interface RoutineProfile {
   parts: BodyPart[]
   /** 次回提案の挑戦度 0〜1 */
   intensity: number
+  /** 今日、重量が上がる種目の数（前回全セット達成） */
+  weightUps: number
+  /** メニューの種目数 */
+  exercises: number
+}
+
+/** セッションの成績: 前回と比べられた種目数と、そのうち前回を超えた数 */
+export interface SessionProgress {
+  /** 記録のある種目数 */
+  recorded: number
+  compared: number
+  improved: number
+}
+
+export async function sessionProgress(s: Session, exercises?: Map<string, Exercise>): Promise<SessionProgress> {
+  const byId = exercises ?? new Map((await listExercises(true)).map((e) => [e.id, e]))
+  let recorded = 0
+  let compared = 0
+  let improved = 0
+  for (const se of await sessionExercises(s.id)) {
+    const ex = byId.get(se.exercise_id)
+    const sets = await setsOf(se.id)
+    if (!ex || !sets.length) continue
+    recorded++
+    const prev = await previousPerformance(ex.id, s)
+    if (!prev) continue
+    compared++
+    const v = volume(sets, ex.equipment, s.body_weight_kg)
+    if (v > volume([...prev.prev.main, ...prev.prev.backoff], ex.equipment, prev.session.body_weight_kg)) improved++
+  }
+  return { recorded, compared, improved }
+}
+
+/** 指定日より後のトレーニングの積み上げ（計測から次の計測までの「努力量」） */
+export async function trainingSince(date: string): Promise<SessionProgress & { sessions: number }> {
+  const byId = new Map((await listExercises(true)).map((e) => [e.id, e]))
+  const out = { sessions: 0, recorded: 0, compared: 0, improved: 0 }
+  for (const s of (await listSessions()).filter((s) => s.date > date)) {
+    const p = await sessionProgress(s, byId)
+    if (!p.recorded) continue
+    out.sessions++
+    out.recorded += p.recorded
+    out.compared += p.compared
+    out.improved += p.improved
+  }
+  return out
+}
+
+/** 全部の種目で前回を超えた回か */
+export const allImproved = (p: SessionProgress) => p.compared > 0 && p.improved === p.compared
+
+/** メニューの連続更新: 新しい順に「全種目で前回超え」が続いた回数 */
+export async function routineStreak(routineId: string): Promise<number> {
+  const byId = new Map((await listExercises(true)).map((e) => [e.id, e]))
+  let n = 0
+  for (const s of (await listSessions()).filter((s) => s.routine_id === routineId)) {
+    const p = await sessionProgress(s, byId)
+    if (p.compared === 0) continue // 比べられない回（初回など）は数えずに飛ばす
+    if (!allImproved(p)) break
+    n++
+  }
+  return n
 }
 
 /** メニューの模様を決める: 含まれる種目の部位と、次回提案の挑戦度の平均 */
@@ -304,11 +396,11 @@ export async function routineProfile(routineId: string): Promise<RoutineProfile>
     body_weight_kg: 0,
     created_at: new Date().toISOString(),
   }
-  const scores = await Promise.all(
-    exercises.map(async (e) => challenge(e, (await previousPerformance(e.id, now))?.prev ?? null)),
-  )
+  const prevs = await Promise.all(exercises.map(async (e) => (await previousPerformance(e.id, now))?.prev ?? null))
+  const scores = exercises.map((e, i) => challenge(e, prevs[i]))
   const intensity = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0.3
-  return { parts, intensity }
+  const weightUps = exercises.filter((e, i) => suggest(e, prevs[i]).achieved).length
+  return { parts, intensity, weightUps, exercises: exercises.length }
 }
 
 export async function lastSessionOf(routineId: string): Promise<Session | undefined> {

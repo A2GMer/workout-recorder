@@ -4,6 +4,7 @@ import {
   challenge,
   neededBackoffReps,
   roundToStep,
+  streak,
   suggest,
   volume,
   type PrevPerformance,
@@ -116,6 +117,17 @@ describe('challenge', () => {
     expect(normal).toBeGreaterThan(heavy)
     expect(heavy).toBeGreaterThan(retry)
     expect(retry).toBeGreaterThan(first)
+  })
+})
+
+describe('streak', () => {
+  it('新しい順に「前より大きい」が続く数', () => {
+    expect(streak([2138, 2100, 2000, 1900])).toBe(3)
+    expect(streak([2138, 2100, 2200, 1900])).toBe(1)
+    expect(streak([2000, 2100])).toBe(0)
+    expect(streak([2100, 2100])).toBe(0) // 同じは更新ではない
+    expect(streak([2100])).toBe(0)
+    expect(streak([])).toBe(0)
   })
 })
 

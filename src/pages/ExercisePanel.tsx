@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { patch, remove, save, uuid } from '../data/repo'
+import { patch, remove, save, uuid, type ExerciseLog } from '../data/repo'
 import {
   backoffWeight,
   barWeight,
   effectiveWeight,
   fix,
   neededBackoffReps,
+  streak,
   suggest,
   volume,
   type PrevPerformance,
@@ -38,6 +39,19 @@ export interface PanelData {
   ex: Exercise
   sets: WorkSet[]
   prev: { prev: PrevPerformance; session: Session } | null
+  /** 過去の実績（新しい順）。連続更新と自己ベストに使う */
+  history: ExerciseLog[]
+}
+
+/** 今日の到達点: 前回を超えたか、何回連続か、自己ベストか */
+export function progressOf(sets: WorkSet[], actual: number, prevVolume: number | null, history: ExerciseLog[]) {
+  const beat = prevVolume !== null && actual > prevVolume
+  const past = history.map((h) => h.volume)
+  const run = beat ? streak([actual, ...past]) : streak(past)
+  const best = Math.max(-Infinity, ...history.map((h) => h.maxWeight))
+  const todayMax = Math.max(-Infinity, ...sets.filter((s) => s.kind === 'main').map((s) => s.weight_kg))
+  const isBest = history.length > 0 && todayMax > best
+  return { beat, run, isBest, todayMax }
 }
 
 const FIELD_COL: Record<Field, keyof WorkSet> = {
@@ -114,6 +128,30 @@ export function ExercisePanel({
 
   const actual = volume(sets, ex.equipment, bw)
   const delta = sugg.prevVolume === null ? null : fix(actual - sugg.prevVolume)
+  const { beat, run, isBest, todayMax } = progressOf(sets, actual, sugg.prevVolume, data.history)
+
+  // ---- 前回を超えた瞬間: 数字がひと呼吸ふくらみ、端末が短く震える ----
+  const [pulse, setPulse] = useState(false)
+  const wasBeat = useRef(beat)
+  useEffect(() => {
+    const crossed = beat && !wasBeat.current
+    wasBeat.current = beat
+    if (!crossed) return
+    setPulse(true)
+    try {
+      navigator.vibrate?.(40)
+    } catch {
+      // 対応していない端末は無視
+    }
+    const t = setTimeout(() => setPulse(false), 700)
+    return () => clearTimeout(t)
+  }, [beat])
+
+  // 到達点の一言（更新の連続・自己ベスト）
+  const marks: string[] = []
+  if (isBest) marks.push(`自己ベスト ${fmtWeight(ex.equipment, todayMax)}`)
+  if (beat && run >= 2) marks.push(`${run}回連続で更新`)
+  else if (!beat && run >= 1) marks.push(`${run}回連続更新中`)
 
   // ---- 操作 ----
   function setDraft(key: string, field: Field, v: number) {
@@ -242,13 +280,14 @@ export function ExercisePanel({
     <section className="no-scrollbar flex h-full w-full shrink-0 grow-0 basis-full flex-col overflow-y-auto px-5 pb-64 [&>*]:shrink-0">
       {/* ボリューム */}
       <div className="flex flex-col items-center pt-4">
-        <span className="text-[56px] leading-none tracking-tight">{fmtVolume(actual)}</span>
+        <span className={`text-[56px] leading-none tracking-tight ${pulse ? 'animate-beat' : ''}`}>{fmtVolume(actual)}</span>
         {/* 前回比: 超えたら白で +N、まだなら「あと N」（前回 +1 まで） */}
-        <span className={`mt-2 h-4 text-xs leading-4 ${delta !== null && delta > 0 ? 'text-fg' : 'text-dim'}`}>
-          {delta === null ? '' : delta > 0 ? `+${fmtVolume(delta)}` : `あと ${fmtVolume(Math.max(1, -delta + 1))}`}
+        <span className={`mt-2 h-4 text-xs leading-4 ${beat ? 'text-fg' : 'text-dim'}`}>
+          {delta === null ? '' : beat ? `+${fmtVolume(delta)}` : `あと ${fmtVolume(Math.max(1, -delta + 1))}`}
         </span>
+        <span className={`mt-1 h-4 text-[11px] leading-4 ${beat ? 'text-dim' : 'text-faint'}`}>{marks.join(' · ')}</span>
         {sugg.prevVolume !== null && (
-          <div className="mt-4 h-px w-40 bg-line">
+          <div className="mt-3 h-px w-40 bg-line">
             <div className="h-px bg-fg transition-all duration-500" style={{ width: `${progress * 100}%` }} />
           </div>
         )}

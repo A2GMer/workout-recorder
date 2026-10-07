@@ -122,3 +122,12 @@ export const MEASURE_ITEMS: { label: string; keys: MeasureKey[]; unit: 'kg' | 'c
 ]
 
 export const MEASURE_KEYS: MeasureKey[] = MEASURE_ITEMS.flatMap((i) => i.keys)
+
+/** 「大きくなるのが前進」の項目。体重とウエストは増減どちらが良いか人によるので外す */
+export const GROWTH_KEYS: MeasureKey[] = MEASURE_KEYS.filter((k) => k !== 'weight_kg' && k !== 'waist')
+
+export function measureLabel(k: MeasureKey): string {
+  const item = MEASURE_ITEMS.find((i) => i.keys.includes(k))!
+  const side = item.keys.length > 1 ? (item.keys[0] === k ? ' 左' : ' 右') : ''
+  return item.label + side
+}
