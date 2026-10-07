@@ -103,6 +103,8 @@ export function Figure3D({
   const lastX = useRef(0)
   const downAt = useRef({ x: 0, t: 0 })
   const cycle = useRef<() => void>(() => {})
+  // タップで選んだモーション。データ更新で描き直しても戻らないように持つ
+  const chosen = useRef<Motion | null>(null)
 
   const emphasisKey = [...(emphasis ?? (showTarget ? figure?.lacking : null) ?? [])].sort().join(',')
 
@@ -243,7 +245,7 @@ export function Figure3D({
           const clip = gltf.animations.find((c) => c.name.toLowerCase() === name)
           if (clip) actions.set(name, mixer.clipAction(clip))
         }
-        let current: Motion = still ? 'idle' : motion
+        let current: Motion = still ? 'idle' : (chosen.current ?? motion)
         let active = actions.get(current) ?? [...actions.values()][0]
         active?.play()
         if (still && active) active.paused = true
@@ -256,8 +258,11 @@ export function Figure3D({
           if (active && active !== nextAction) active.crossFadeTo(nextAction, 0.4, false)
           active = nextAction
           current = next
+          chosen.current = next
         }
-        if (import.meta.env.DEV) (window as unknown as { __fig: unknown }).__fig = { scene, camera, renderer, root, mixer, cycle: cycle.current }
+        if (import.meta.env.DEV) {
+          ;(window as unknown as { __fig: unknown }).__fig = { scene, camera, renderer, root, mixer, cycle: cycle.current, get motion() { return current } }
+        }
       })
       .catch(() => setFailed(true))
 
