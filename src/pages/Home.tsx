@@ -14,8 +14,11 @@ import {
   sessionProgress,
   startSession,
 } from '../data/repo'
+import { idealTargets, proposals } from '../lib/ideal'
 import { isMeasureDue } from '../lib/measure'
-import { md } from '../lib/format'
+import { md, num } from '../lib/format'
+import { fix } from '../lib/progression'
+import { MEASURE_ITEMS, type Measurement } from '../lib/types'
 import { BodyArt } from '../ui/BodyArt'
 import { Icon } from '../ui/Icon'
 import { IconButton, TopBar } from '../ui/TopBar'
@@ -42,10 +45,16 @@ export default function Home() {
     return results.filter((r) => r.p.compared > 0).reverse()
   })
 
-  const measureDue = useLiveQuery(async () => {
-    const [last] = await listMeasurements()
-    return isMeasureDue(last?.date ?? null, (await getSettings()).measure_interval_days, localDate())
+  const body = useLiveQuery(async () => {
+    const list = await listMeasurements()
+    const settings = await getSettings()
+    return {
+      list,
+      height: settings.height_cm,
+      due: isMeasureDue(list[0]?.date ?? null, settings.measure_interval_days, localDate()),
+    }
   })
+  const measureDue = body?.due
   const [snoozed, setSnoozed] = useState(() => readSnooze() === localDate())
 
   // 次にやるメニュー = 未実施、または最後に行ってから一番時間が空いているもの
@@ -120,6 +129,8 @@ export default function Home() {
         )}
       </button>
 
+      {body && <BodyStrip list={body.list} height={body.height} onOpen={() => nav('/body')} onMeasure={() => nav('/body/measure')} onHeight={() => nav('/settings')} />}
+
       {chain && chain.length > 0 && (
         <button
           onClick={() => nav('/history')}
@@ -160,6 +171,94 @@ export default function Home() {
           <span className="h-3" />
         </button>
       </nav>
+    </div>
+  )
+}
+
+/**
+ * からだの数字。常に出す。
+ * 上段: 初回からの変化（大きい順）。下段: 魅力的な体まで「あと何cm」（不足の割合が大きい順・上位3つ）
+ * 左右がある項目は平均。変化が 0 の項目は出さない
+ */
+function BodyStrip({ list, height, onOpen, onMeasure, onHeight }: {
+  list: Measurement[]
+  height: number | null
+  onOpen: () => void
+  onMeasure: () => void
+  onHeight: () => void
+}) {
+  const latest = list[0]
+  const first = list[list.length - 1]
+  const avg = (m: Measurement, keys: (keyof Measurement)[]) => {
+    const vs = keys.map((k) => m[k]).filter((v): v is number => typeof v === 'number')
+    return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null
+  }
+  const changes =
+    list.length >= 2
+      ? MEASURE_ITEMS.flatMap((item) => {
+          const a = avg(latest, item.keys)
+          const b = avg(first, item.keys)
+          if (a === null || b === null) return []
+          const d = Math.round((a - b) * 2) / 2
+          return d === 0 ? [] : [{ label: item.label, delta: fix(d), unit: item.unit }]
+        }).sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta))
+      : []
+  const next = proposals(idealTargets(latest ?? null, height)).slice(0, 3)
+
+  const Row = ({ children, onClick, label }: { children: React.ReactNode; onClick: () => void; label: string }) => (
+    <button onClick={onClick} className="no-scrollbar flex h-9 w-full items-center gap-4 overflow-x-auto px-5 text-left whitespace-nowrap">
+      <span className="w-8 shrink-0 text-[10px] tracking-[0.15em] text-faint">{label}</span>
+      {children}
+    </button>
+  )
+
+  return (
+    <div className="shrink-0 pb-1">
+      {/* 初回からの変化 */}
+      {!latest ? (
+        <Row label="BODY" onClick={onMeasure}>
+          <span className="text-xs text-dim">計測すると、からだの変化がここに出ます</span>
+        </Row>
+      ) : changes.length === 0 ? (
+        <Row label="BODY" onClick={onOpen}>
+          <span className="text-xs text-dim">{list.length < 2 ? `${md(latest.date)} 計測 · 次の計測で変化が出ます` : '初回から変化なし'}</span>
+        </Row>
+      ) : (
+        <Row label={md(first.date)} onClick={onOpen}>
+          {changes.map((c) => (
+            <span key={c.label} className="flex shrink-0 items-baseline gap-1">
+              <span className="text-[11px] text-dim">{c.label}</span>
+              <span className={`text-sm ${c.delta > 0 ? 'text-fg' : 'text-dim'}`}>
+                {c.delta > 0 ? `+${num(c.delta)}` : `−${num(-c.delta)}`}
+                {c.unit === 'kg' && <span className="ml-0.5 text-[10px] text-faint">kg</span>}
+              </span>
+            </span>
+          ))}
+        </Row>
+      )}
+      {/* 魅力的な体まで */}
+      {latest &&
+        (!height ? (
+          <Row label="あと" onClick={onHeight}>
+            <span className="text-xs text-faint">身長を設定すると、目標まであと何cmか出ます</span>
+          </Row>
+        ) : next.length === 0 ? (
+          <Row label="あと" onClick={onOpen}>
+            <span className="text-xs text-dim">目標のプロポーションに届いています</span>
+          </Row>
+        ) : (
+          <Row label="あと" onClick={() => onOpen()}>
+            {next.map((p) => (
+              <span key={p.label} className="flex shrink-0 items-baseline gap-1">
+                <span className="text-[11px] text-dim">{p.label}</span>
+                <span className="text-sm text-fg">
+                  {num(p.gap)}
+                  <span className="ml-0.5 text-[10px] text-faint">cm</span>
+                </span>
+              </span>
+            ))}
+          </Row>
+        ))}
     </div>
   )
 }

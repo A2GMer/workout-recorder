@@ -173,7 +173,8 @@ export function BodyArt({
       if (now - last < 33) return // 30fps で十分
       last = now
       const t = still ? 0 : (now / 1000) * speed
-      g.current!.innerHTML = gens
+      if (!g.current) return // 画面遷移で外れた後のフレームは描かない
+      g.current.innerHTML = gens
         .map((gen, gi) =>
           gen(t + gi * 1.7, k, detail)
             .map((d, i) => `<path d="${d}" opacity="${(gi ? 0.55 : 1) * (0.55 + 0.45 * ((i % 3) / 2))}"/>`)

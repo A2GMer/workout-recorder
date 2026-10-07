@@ -115,26 +115,6 @@ input[type='range'].gauge::-moz-range-thumb {
   }
 }
 
-/* 全身図の「足りないところ」。斜線がゆっくり明滅する */
-@keyframes hatch-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-.hatch-pulse {
-  animation: hatch-pulse 2.4s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .hatch-pulse {
-    animation: none;
-    opacity: 0.7;
-  }
-}
-
 .snap-x-panels {
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
