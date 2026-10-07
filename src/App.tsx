@@ -10,6 +10,7 @@ import SettingsPage from './pages/SettingsPage'
 import Login from './pages/Login'
 import MenuWizardPage from './pages/MenuWizard'
 import Welcome from './pages/Welcome'
+import Body, { Measure } from './pages/Body'
 
 // 開発時だけ模様の一覧を見られるようにする（本番ビルドには含めない）
 const Patterns = import.meta.env.DEV ? lazy(() => import('./pages/Patterns')) : null
@@ -37,6 +38,8 @@ export default function App() {
       <Route path="/history" element={<History />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/welcome" element={<Welcome />} />
+      <Route path="/body" element={<Body />} />
+      <Route path="/body/measure" element={<Measure />} />
       <Route path="/menu/new" element={<MenuWizardPage />} />
       <Route path="/menu/:id" element={<MenuWizardPage />} />
       {Patterns && (

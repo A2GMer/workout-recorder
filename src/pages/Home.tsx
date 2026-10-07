@@ -1,6 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { lastSessionOf, listRoutines, localDate, routineProfile, startSession } from '../data/repo'
+import { useState } from 'react'
+import { getSettings, lastSessionOf, listMeasurements, listRoutines, localDate, routineProfile, startSession } from '../data/repo'
+import { isMeasureDue } from '../lib/measure'
 import { md } from '../lib/format'
 import { BodyArt } from '../ui/BodyArt'
 import { Icon } from '../ui/Icon'
@@ -15,6 +17,12 @@ export default function Home() {
       rs.map(async (r) => ({ ...r, last: await lastSessionOf(r.id), profile: await routineProfile(r.id) })),
     )
   })
+
+  const measureDue = useLiveQuery(async () => {
+    const [last] = await listMeasurements()
+    return isMeasureDue(last?.date ?? null, (await getSettings()).measure_interval_days, localDate())
+  })
+  const [snoozed, setSnoozed] = useState(() => readSnooze() === localDate())
 
   // 次にやるメニュー = 未実施、または最後に行ってから一番時間が空いているもの
   const next = routines?.length
@@ -32,9 +40,12 @@ export default function Home() {
     <div className="flex h-full flex-col">
       <TopBar
         title={md(localDate())}
-        side={96}
+        side={132}
         right={
           <>
+            <IconButton label="からだ" onClick={() => nav('/body')}>
+              <Icon name="tape" />
+            </IconButton>
             <IconButton label="履歴" onClick={() => nav('/history')}>
               <Icon name="history" />
             </IconButton>
@@ -44,6 +55,25 @@ export default function Home() {
           </>
         }
       />
+
+      {measureDue && !snoozed && (
+        <div className="mx-5 mt-1 flex h-14 shrink-0 items-center rounded-2xl bg-panel pl-4">
+          <span className="min-w-0 flex-1 truncate text-sm">そろそろ計測の時期です</span>
+          <button onClick={() => nav('/body/measure')} className="h-10 shrink-0 rounded-full bg-fg px-4 text-sm text-bg">
+            計測する
+          </button>
+          <button
+            onClick={() => {
+              writeSnooze(localDate())
+              setSnoozed(true)
+            }}
+            aria-label="今日は表示しない"
+            className="flex h-12 w-11 shrink-0 items-center justify-center text-faint"
+          >
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+      )}
 
       <button
         onClick={() => next && start(next.id)}
@@ -91,4 +121,21 @@ export default function Home() {
       </nav>
     </div>
   )
+}
+
+// 計測のお知らせを「今日は表示しない」にした日
+const SNOOZE_KEY = 'measure-snooze'
+function readSnooze() {
+  try {
+    return localStorage.getItem(SNOOZE_KEY)
+  } catch {
+    return null
+  }
+}
+function writeSnooze(date: string) {
+  try {
+    localStorage.setItem(SNOOZE_KEY, date)
+  } catch {
+    // 保存できなくても続行
+  }
 }

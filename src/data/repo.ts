@@ -4,6 +4,7 @@ import type {
   BodyPart,
   Equipment,
   Exercise,
+  Measurement,
   Routine,
   RoutineItem,
   Session,
@@ -43,12 +44,23 @@ export const remove = (table: SyncTable, id: string) => patch(table, id, { delet
 
 // ---- 設定 ----
 
-export const DEFAULT_SETTINGS: Settings = { id: SETTINGS_ID, body_weight_kg: 70, ez_bar_kg: 10, smith_bar_kg: 20 }
+export const DEFAULT_SETTINGS: Settings = {
+  id: SETTINGS_ID,
+  body_weight_kg: 70,
+  ez_bar_kg: 10,
+  smith_bar_kg: 20,
+  measure_interval_days: 14,
+}
 
 export async function getSettings(): Promise<Settings> {
   // 後から増えた項目は既定値で埋める
   const s = await db.settings.get(SETTINGS_ID)
-  return { ...DEFAULT_SETTINGS, ...s, smith_bar_kg: s?.smith_bar_kg ?? DEFAULT_SETTINGS.smith_bar_kg }
+  return {
+    ...DEFAULT_SETTINGS,
+    ...s,
+    smith_bar_kg: s?.smith_bar_kg ?? DEFAULT_SETTINGS.smith_bar_kg,
+    measure_interval_days: s?.measure_interval_days ?? DEFAULT_SETTINGS.measure_interval_days,
+  }
 }
 
 // ---- 一覧 ----
@@ -162,6 +174,21 @@ export async function startSession(routineId: string): Promise<string> {
   await save('sessions', session)
   if (ses.length) await save('session_exercises', ses)
   return session.id
+}
+
+// ---- 身体計測 ----
+
+/** 新しい順 */
+export async function listMeasurements(): Promise<Measurement[]> {
+  return (await db.measurements.toArray()).filter(alive).sort((a, b) => (a.date < b.date ? 1 : -1))
+}
+
+/** 計測を保存。同じ日の記録があれば上書きし、体重は設定にも反映する */
+export async function saveMeasurement(values: Partial<Measurement>, date = localDate()) {
+  const sameDay = (await listMeasurements()).find((m) => m.date === date)
+  const row = { ...(sameDay ?? { id: uuid(), date }), ...values } as Measurement
+  await save('measurements', row)
+  if (row.weight_kg) await save<Settings>('settings', { ...(await getSettings()), body_weight_kg: row.weight_kg })
 }
 
 // ---- メニュー作成 ----

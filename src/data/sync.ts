@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react'
 import { db, SETTINGS_ID, SYNC_TABLES, type OutboxItem, type SyncTable } from './db'
+import { MEASURE_KEYS } from '../lib/types'
 import { supabase } from './supabase'
 
-const NUMERIC_FIELDS = ['body_weight_kg', 'ez_bar_kg', 'smith_bar_kg', 'weight_step', 'backoff_ratio', 'weight_kg']
+const NUMERIC_FIELDS: string[] = ['body_weight_kg', 'ez_bar_kg', 'smith_bar_kg', 'weight_step', 'backoff_ratio', 'weight_kg', ...MEASURE_KEYS]
 const PAGE = 1000
 
 type Status = { pending: number; syncing: boolean; error: boolean }

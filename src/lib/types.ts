@@ -22,6 +22,8 @@ export interface Settings extends Synced {
   body_weight_kg: number
   ez_bar_kg: number
   smith_bar_kg: number
+  /** 計測を促す間隔（日） */
+  measure_interval_days: number
 }
 
 export interface Exercise extends Synced {
@@ -82,3 +84,41 @@ export const EQUIPMENT_LABEL: Record<Equipment, string> = {
   machine: 'マシン',
   bodyweight: '自重',
 }
+
+/** 体のサイズ計測（メジャー）。単位は体重のみ kg、ほかは cm */
+export interface Measurement extends Synced {
+  date: string // YYYY-MM-DD
+  weight_kg: number | null
+  waist: number | null
+  chest: number | null
+  shoulders: number | null
+  arm_relaxed_l: number | null
+  arm_relaxed_r: number | null
+  arm_flexed_l: number | null
+  arm_flexed_r: number | null
+  forearm_l: number | null
+  forearm_r: number | null
+  thigh_l: number | null
+  thigh_r: number | null
+  calf_l: number | null
+  calf_r: number | null
+  hip: number | null
+}
+
+export type MeasureKey = Exclude<keyof Measurement, keyof Synced | 'date'>
+
+/** 入力・表示の順番。左右がある項目は [左, 右] */
+export const MEASURE_ITEMS: { label: string; keys: MeasureKey[]; unit: 'kg' | 'cm' }[] = [
+  { label: '体重', keys: ['weight_kg'], unit: 'kg' },
+  { label: 'ウエスト', keys: ['waist'], unit: 'cm' },
+  { label: '胸囲', keys: ['chest'], unit: 'cm' },
+  { label: '肩周り', keys: ['shoulders'], unit: 'cm' },
+  { label: '上腕（脱力）', keys: ['arm_relaxed_l', 'arm_relaxed_r'], unit: 'cm' },
+  { label: '上腕（力こぶ）', keys: ['arm_flexed_l', 'arm_flexed_r'], unit: 'cm' },
+  { label: '前腕', keys: ['forearm_l', 'forearm_r'], unit: 'cm' },
+  { label: '大腿', keys: ['thigh_l', 'thigh_r'], unit: 'cm' },
+  { label: 'ふくらはぎ', keys: ['calf_l', 'calf_r'], unit: 'cm' },
+  { label: '臀囲', keys: ['hip'], unit: 'cm' },
+]
+
+export const MEASURE_KEYS: MeasureKey[] = MEASURE_ITEMS.flatMap((i) => i.keys)

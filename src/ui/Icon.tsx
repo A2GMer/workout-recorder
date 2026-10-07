@@ -12,6 +12,8 @@ const PATHS = {
   down: 'M6 9l6 6 6-6',
   comment: 'M5 6.5A2.5 2.5 0 017.5 4h9A2.5 2.5 0 0119 6.5v7a2.5 2.5 0 01-2.5 2.5H11l-4 4v-4h0.5A2.5 2.5 0 015 13.5z',
   arrow: 'M5 12h14M13 6l6 6-6 6',
+  // メジャー（巻き尺）
+  tape: 'M12 4a8 8 0 1 0 0 16h8M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6M16 20v-2.5M19 20v-2.5',
 } as const
 
 export type IconName = keyof typeof PATHS

@@ -156,6 +156,21 @@ export default function SettingsPage() {
             <StepField label="体重" unit="kg" step={1} min={20} max={250} value={Math.round(settings.body_weight_kg)} onChange={(v) => saveSettings({ body_weight_kg: v })} />
             <StepField label="EZバー" unit="kg" step={0.5} min={0} value={settings.ez_bar_kg} onChange={(v) => saveSettings({ ez_bar_kg: v })} />
             <StepField label="スミスバー" unit="kg" step={0.5} min={0} value={settings.smith_bar_kg} onChange={(v) => saveSettings({ smith_bar_kg: v })} />
+            <div className="flex h-14 items-center justify-between gap-3">
+              <span className="text-sm text-dim">計測の間隔</span>
+              <span className="flex gap-1 rounded-xl bg-chip p-1">
+                {[7, 14, 28].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => saveSettings({ measure_interval_days: d })}
+                    aria-pressed={settings.measure_interval_days === d}
+                    className={`h-9 rounded-lg px-3 text-sm transition ${settings.measure_interval_days === d ? 'bg-fg text-bg' : 'text-dim'}`}
+                  >
+                    {d / 7}週
+                  </button>
+                ))}
+              </span>
+            </div>
           </div>
         </Section>
 
