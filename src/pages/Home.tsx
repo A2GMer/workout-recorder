@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   allImproved,
   getSettings,
@@ -205,10 +205,11 @@ function BodyStrip({ list, height, onOpen, onMeasure, onHeight }: {
       : []
   const next = proposals(idealTargets(latest ?? null, height)).slice(0, 3)
 
+  // 日付や「あと」は動かさず、その右だけがゆっくり右から左へ流れてループする
   const Row = ({ children, onClick, label }: { children: React.ReactNode; onClick: () => void; label: string }) => (
-    <button onClick={onClick} className="no-scrollbar flex h-9 w-full items-center gap-4 overflow-x-auto px-5 text-left whitespace-nowrap">
+    <button onClick={onClick} className="flex h-9 w-full items-center gap-4 pl-5 text-left whitespace-nowrap">
       <span className="w-8 shrink-0 text-[10px] tracking-[0.15em] text-faint">{label}</span>
-      {children}
+      <Marquee>{children}</Marquee>
     </button>
   )
 
@@ -262,6 +263,43 @@ function BodyStrip({ list, height, onOpen, onMeasure, onHeight }: {
     </div>
   )
 }
+
+/**
+ * 横に流れる帯。中身が入り切るときは動かさない。
+ * 中身を2つ並べて半分ぶん動かすことで継ぎ目なくループする。速さは一定（px/秒）
+ */
+function Marquee({ children }: { children: React.ReactNode }) {
+  const box = useRef<HTMLDivElement>(null)
+  const first = useRef<HTMLSpanElement>(null)
+  const [dur, setDur] = useState<number | null>(null)
+  useEffect(() => {
+    const measure = () => {
+      const w = first.current?.scrollWidth ?? 0
+      const boxW = box.current?.clientWidth ?? 0
+      setDur(w > boxW ? (w + MARQUEE_GAP) / MARQUEE_SPEED : null)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    if (box.current) ro.observe(box.current)
+    return () => ro.disconnect()
+  }, [children])
+  return (
+    <div ref={box} className="min-w-0 flex-1 overflow-hidden">
+      <div className={`flex w-max items-center ${dur ? 'marquee' : ''}`} style={{ gap: MARQUEE_GAP, ['--dur' as string]: `${dur ?? 0}s` }}>
+        <span ref={first} className="flex items-center" style={{ gap: MARQUEE_GAP }}>
+          {children}
+        </span>
+        {dur && (
+          <span aria-hidden="true" className="flex items-center" style={{ gap: MARQUEE_GAP }}>
+            {children}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+const MARQUEE_GAP = 20 // px
+const MARQUEE_SPEED = 28 // px/秒
 
 /** ホーム下部の連なりに出す直近セッション数 */
 const CHAIN_LENGTH = 12

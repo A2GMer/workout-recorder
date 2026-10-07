@@ -115,6 +115,21 @@ input[type='range'].gauge::-moz-range-thumb {
   }
 }
 
+/* ホームの数字帯。中身を2つ並べ、1つ分（50% + すき間の半分）だけ流してループする */
+@keyframes marquee {
+  to {
+    transform: translateX(calc(-50% - 10px));
+  }
+}
+.marquee {
+  animation: marquee var(--dur, 20s) linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee {
+    animation: none;
+  }
+}
+
 .snap-x-panels {
   scroll-snap-type: x mandatory;
   scrollbar-width: none;

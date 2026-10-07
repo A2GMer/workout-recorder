@@ -8,8 +8,14 @@ import type { DimKey, Figure } from '../lib/ideal'
  * 寸法は周囲から写した象徴的なもの（胴は横長の楕円、腕脚は円）。差は小さいので目標は EXAGGERATE 倍に誇張。
  */
 const EXAGGERATE = 3
-const N = 28 // 輪の点の数
-const MERIDIANS = 8 // 経線の本数
+const N = 24 // 輪の点の数
+const MERIDIANS = 6 // 経線の本数
+
+/**
+ * 縦の位置（身長に対する割合）。人体の標準比率に合わせる。計測値ではここは変わらない
+ * 肩 0.18 / 胸 0.27 / へそ 0.40 / 股 0.50 / 肘 0.41 / 手首 0.56 / 膝 0.73 / くるぶし 0.95
+ */
+const Y = { shoulder: 0.18, chest: 0.27, waist: 0.4, hip: 0.5, elbow: 0.41, wrist: 0.56, knee: 0.73, ankle: 0.95 }
 const W = 200
 const H = 280
 const Y0 = 12
@@ -46,30 +52,31 @@ export function buildSegments(figure: Figure, heightCm: number, showTarget: bool
   const lacking = (k: DimKey) => showTarget && figure.lacking.has(k)
   const segs: Segment[] = []
 
-  // 頭: 球の緯線
+  // 頭: 球の緯線（3本）
   const headR = h * 0.058
   const headY = Y0 / (H / h) + headR
   const head: Segment = []
-  for (const deg of [-62, -35, -10, 15, 40, 62]) {
+  for (const deg of [-50, -5, 40]) {
     const a = (deg * Math.PI) / 180
     head.push({ y: headY + headR * Math.sin(a), cx: 0, rx: headR * Math.cos(a), rz: headR * Math.cos(a), part: 'head' })
   }
   segs.push(head)
-  // 首
+  // 首（1本。経線で頭と肩をつなぐために2点）
   segs.push([
-    { y: h * 0.135, cx: 0, rx: h * 0.033, rz: h * 0.033, part: 'neck' },
-    { y: h * 0.175, cx: 0, rx: h * 0.038, rz: h * 0.038, part: 'neck' },
+    { y: h * 0.14, cx: 0, rx: h * 0.034, rz: h * 0.034, part: 'neck' },
+    { y: h * 0.17, cx: 0, rx: h * 0.038, rz: h * 0.038, part: 'neck' },
   ])
 
-  // 胴: 肩 → 胸 → ウエスト → 腰 を補間
+  // 胴: 肩 → 胸 → ウエスト → 腰 を補間（7本）
   const keys: { f: number; k: DimKey }[] = [
-    { f: 0.19, k: 'shoulders' },
-    { f: 0.29, k: 'chest' },
-    { f: 0.42, k: 'waist' },
-    { f: 0.52, k: 'hip' },
+    { f: Y.shoulder, k: 'shoulders' },
+    { f: Y.chest, k: 'chest' },
+    { f: Y.waist, k: 'waist' },
+    { f: Y.hip, k: 'hip' },
   ]
   const torso: Segment = []
-  for (let f = 0.19; f <= 0.5201; f += 0.0235) {
+  const torsoStep = (Y.hip - Y.shoulder) / 6
+  for (let f = Y.shoulder; f <= Y.hip + 1e-6; f += torsoStep) {
     let i = 0
     while (i < keys.length - 2 && f > keys[i + 1].f) i++
     const a = keys[i]
@@ -84,49 +91,50 @@ export function buildSegments(figure: Figure, heightCm: number, showTarget: bool
   }
   segs.push(torso)
 
-  // 腕: 肩の外側から、少し外へ開きながら下へ
+  /** 等間隔に n 本の輪（両端を含む） */
+  const span = (from: number, to: number, n: number, make: (f: number, t: number) => Ring): Ring[] =>
+    Array.from({ length: n }, (_, i) => {
+      const t = i / (n - 1)
+      return make(from + (to - from) * t, t)
+    })
+
+  // 腕: 肩の外側から、少し外へ開きながら下へ（上腕3本・前腕3本）
   const shoulderRx = torsoSection(cur.shoulders).rx
   for (const side of [-1, 1]) {
-    const arm: Segment = []
     const armR = limbSection(cur.arm).rx
     const x0 = side * (shoulderRx + armR * 0.75)
-    for (let f = 0.205; f <= 0.4401; f += 0.0335) {
-      const t = (f - 0.205) / (0.44 - 0.205)
+    const upper = span(Y.shoulder + 0.02, Y.elbow, 3, (f, t) => {
       const taper = 1 - 0.12 * t
       const ring: Ring = { y: h * f, cx: x0 + side * h * 0.012 * t, ...limbSection(cur.arm * taper), part: 'arm' }
       if (lacking('arm')) ring.target = limbSection(tgt.arm * taper)
-      arm.push(ring)
-    }
-    for (let f = 0.47; f <= 0.6301; f += 0.032) {
-      const t = (f - 0.47) / (0.63 - 0.47)
+      return ring
+    })
+    const fore = span(Y.elbow + 0.03, Y.wrist, 3, (f, t) => {
       const taper = 1 - 0.3 * t
-      const ring: Ring = { y: h * f, cx: x0 + side * h * (0.012 + 0.022 * t), ...limbSection(cur.forearm * taper), part: 'forearm' }
+      const ring: Ring = { y: h * f, cx: x0 + side * h * (0.012 + 0.02 * t), ...limbSection(cur.forearm * taper), part: 'forearm' }
       if (lacking('forearm')) ring.target = limbSection(tgt.forearm * taper)
-      arm.push(ring)
-    }
-    segs.push(arm)
+      return ring
+    })
+    segs.push([...upper, ...fore])
   }
 
-  // 脚: 腰の下から真っ直ぐ
+  // 脚: 腰の下から真っ直ぐ（大腿4本・ふくらはぎ4本）
   const hipRx = torsoSection(cur.hip).rx
   for (const side of [-1, 1]) {
-    const leg: Segment = []
     const cx = side * hipRx * 0.5
-    for (let f = 0.545; f <= 0.7301; f += 0.0265) {
-      const t = (f - 0.545) / (0.73 - 0.545)
+    const thigh = span(Y.hip + 0.02, Y.knee, 4, (f, t) => {
       const taper = 1 - 0.25 * t
       const ring: Ring = { y: h * f, cx, ...limbSection(cur.thigh * taper), part: 'thigh' }
       if (lacking('thigh')) ring.target = limbSection(tgt.thigh * taper)
-      leg.push(ring)
-    }
-    for (let f = 0.755; f <= 0.9601; f += 0.0295) {
-      const t = (f - 0.755) / (0.96 - 0.755)
+      return ring
+    })
+    const calf = span(Y.knee + 0.03, Y.ankle, 4, (f, t) => {
       const taper = t < 0.3 ? 1 : 1 - 0.4 * ((t - 0.3) / 0.7)
       const ring: Ring = { y: h * f, cx, ...limbSection(cur.calf * taper), part: 'calf' }
       if (lacking('calf')) ring.target = limbSection(tgt.calf * taper)
-      leg.push(ring)
-    }
-    segs.push(leg)
+      return ring
+    })
+    segs.push([...thigh, ...calf])
   }
   return segs
 }
