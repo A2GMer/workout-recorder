@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, useNavigate } from 'react-router-dom'
 import { db } from '../data/db'
@@ -5,8 +6,10 @@ import { getSettings, listExercises, listMeasurements, listSessions, remove, ses
 import { fmtVolume, md, num } from '../lib/format'
 import { figureOf, idealTargets, proposals } from '../lib/ideal'
 import { BODY_PART_LABEL } from '../lib/types'
-import { FigureArt } from '../ui/FigureArt'
 import { TopBar } from '../ui/TopBar'
+
+// 3D（three.js とモデル）は履歴を開いたときだけ読み込む
+const Figure3D = lazy(() => import('../ui/Figure3D'))
 import { Icon } from '../ui/Icon'
 
 /**
@@ -27,7 +30,9 @@ function Proportion() {
   const ready = !!height && !!latest
   return (
     <div className="flex flex-col items-center pt-2 pb-8">
-      <FigureArt figure={figure} heightCm={height ?? 170} showTarget={ready} className="h-72 text-fg" />
+      <Suspense fallback={<div className="h-80 w-full" />}>
+        <Figure3D figure={figure} showTarget={ready} className="h-80 w-full" />
+      </Suspense>
       {!height ? (
         <button onClick={() => nav('/settings')} className="mt-2 h-11 px-4 text-xs text-dim">
           身長を設定すると、足りない部位が出ます
