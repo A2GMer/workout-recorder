@@ -34,6 +34,16 @@ interface Row {
   need?: number | null
 }
 
+/** 今日の並べ替え・入れ替え・外す */
+export interface Arrange {
+  canBack: boolean
+  canForward: boolean
+  onMove: (dir: -1 | 1) => void
+  onDrop: () => void
+  /** 記録がなく、入れ替え先があるときだけ */
+  onReplace?: () => void
+}
+
 export interface PanelData {
   se: SessionExercise
   ex: Exercise
@@ -67,6 +77,7 @@ export function ExercisePanel({
   activeKey,
   openEditor,
   closeEditor,
+  arrange,
 }: {
   data: PanelData
   session: Session
@@ -74,6 +85,7 @@ export function ExercisePanel({
   activeKey: string | null
   openEditor: (e: Editor) => void
   closeEditor: () => void
+  arrange?: Arrange
 }) {
   const { se, ex, sets, prev } = data
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
@@ -394,6 +406,36 @@ export function ExercisePanel({
           </button>
         )}
       </div>
+
+      {/* 今日の予定を変える: 順番 / 入れ替え / 外す */}
+      {arrange && (
+        <div className="mt-10 flex items-center justify-center gap-2 text-xs text-faint">
+          <button
+            onClick={() => arrange.onMove(-1)}
+            disabled={!arrange.canBack}
+            aria-label="順番を前へ"
+            className="flex h-11 w-11 items-center justify-center rounded-full active:text-fg disabled:opacity-20"
+          >
+            <Icon name="back" size={18} />
+          </button>
+          {arrange.onReplace && (
+            <button onClick={arrange.onReplace} className="h-11 rounded-full px-4 active:text-fg">
+              種目を変える
+            </button>
+          )}
+          <button onClick={arrange.onDrop} className="h-11 rounded-full px-4 active:text-fg">
+            今日はやらない
+          </button>
+          <button
+            onClick={() => arrange.onMove(1)}
+            disabled={!arrange.canForward}
+            aria-label="順番を後ろへ"
+            className="flex h-11 w-11 items-center justify-center rounded-full active:text-fg disabled:opacity-20"
+          >
+            <Icon name="back" size={18} className="rotate-180" />
+          </button>
+        </div>
+      )}
     </section>
   )
 }

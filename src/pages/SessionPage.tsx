@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useParams } from 'react-router-dom'
 import { db } from '../data/db'
@@ -6,16 +6,23 @@ import {
   exerciseHistory,
   getSettings,
   listExercises,
+  listMeasurements,
   patch,
   previousPerformance,
+  remove,
   save,
   sessionExercises,
   setsOf,
   uuid,
 } from '../data/repo'
+import { figureOf, idealTargets } from '../lib/ideal'
 import { fmtVolume, md, num } from '../lib/format'
 import { fix, volume } from '../lib/progression'
-import type { Session, SessionExercise, Settings } from '../lib/types'
+import type { Exercise, Session, SessionExercise, Settings } from '../lib/types'
+import { DIMS_OF_PART } from '../ui/Figure3D'
+
+// 背景の 3D は別チャンク
+const Figure3D = lazy(() => import('../ui/Figure3D'))
 import { Stepper, type Editor } from '../ui/Stepper'
 import { TopBar } from '../ui/TopBar'
 import { Icon } from '../ui/Icon'
@@ -43,16 +50,20 @@ export default function SessionPage() {
       })
     }
     const unused = exercises.filter((e) => !e.archived && !ses.some((s) => s.exercise_id === e.id))
-    return { session, settings, panels, unused }
+    const [latest] = await listMeasurements()
+    const figure = figureOf(latest ?? null, idealTargets(latest ?? null, settings.height_cm))
+    return { session, settings, panels, unused, figure, hasBody: !!latest && !!settings.height_cm }
   }, [id])
 
   const [editor, setEditor] = useState<Editor | null>(null)
   const [page, setPage] = useState(0)
+  // 種目の入れ替え先を選んでいるパネル
+  const [replacing, setReplacing] = useState<SessionExercise | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
 
   if (data === undefined) return null
   if (data === null) return <TopBar back="/" />
-  const { session, settings, panels, unused } = data
+  const { session, settings, panels, unused, figure, hasBody } = data
 
   function onScroll() {
     const el = scroller.current!
@@ -80,6 +91,31 @@ export default function SessionPage() {
     })
   }
 
+  /** 今日の順番を入れ替える（隣と sort_order を交換） */
+  async function move(i: number, dir: -1 | 1) {
+    const a = panels[i]?.se
+    const b = panels[i + dir]?.se
+    if (!a || !b) return
+    await save<SessionExercise>('session_exercises', [
+      { ...a, sort_order: b.sort_order },
+      { ...b, sort_order: a.sort_order },
+    ])
+    requestAnimationFrame(() => goTo(i + dir))
+  }
+
+  /** 今日はやらない。記録があれば確認してから記録ごと外す */
+  async function dropExercise(p: PanelData) {
+    if (p.sets.length && !confirm(`${p.ex.name} の今日の記録ごと外しますか？`)) return
+    for (const w of p.sets) await remove('work_sets', w.id)
+    await remove('session_exercises', p.se.id)
+  }
+
+  /** 別の種目に入れ替える（記録がないときだけ。順番はそのまま） */
+  async function replaceExercise(se: SessionExercise, ex: Exercise) {
+    setReplacing(null)
+    await patch<SessionExercise>('session_exercises', se.id, { exercise_id: ex.id })
+  }
+
   async function addExercise(exerciseId: string) {
     await save<SessionExercise>('session_exercises', {
       id: uuid(),
@@ -97,6 +133,8 @@ export default function SessionPage() {
 
   const total = panels.length + 1
   const current = panels[page]
+  // 背景の全身図で強調する部位 = 開いている種目の部位
+  const emphasis = new Set(current?.ex.body_part ? DIMS_OF_PART[current.ex.body_part] : [])
   // 前回を超えた種目のドットは白く灯る。進むほど灯りが増える
   const beaten = panels.map((p) => {
     if (!p.sets.length) return false
@@ -112,7 +150,13 @@ export default function SessionPage() {
     : md(session.date)
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
+      {/* 背景: 対象部位を強調した全身図を薄く。操作は受けない */}
+      <div className="pointer-events-none absolute inset-x-0 top-14 bottom-0 flex items-center justify-center opacity-25">
+        <Suspense fallback={null}>
+          <Figure3D figure={figure} showTarget={hasBody} emphasis={emphasis} sex={settings.sex} motion="idle" className="h-[62%] w-full max-w-[420px]" />
+        </Suspense>
+      </div>
       <TopBar
         back="/"
         title={title}
@@ -128,8 +172,8 @@ export default function SessionPage() {
           </button>
         }
       />
-      <div ref={scroller} onScroll={onScroll} className="snap-x-panels flex min-h-0 flex-1 overflow-x-auto">
-        {panels.map((p) => (
+      <div ref={scroller} onScroll={onScroll} className="snap-x-panels relative flex min-h-0 flex-1 overflow-x-auto">
+        {panels.map((p, i) => (
           <ExercisePanel
             key={p.se.id}
             data={p}
@@ -138,6 +182,13 @@ export default function SessionPage() {
             activeKey={editor?.key ?? null}
             openEditor={setEditor}
             closeEditor={() => setEditor(null)}
+            arrange={{
+              canBack: i > 0,
+              canForward: i < panels.length - 1,
+              onMove: (dir) => void move(i, dir),
+              onDrop: () => void dropExercise(p),
+              onReplace: unused.length && !p.sets.length ? () => setReplacing(p.se) : undefined,
+            }}
           />
         ))}
         <section className="no-scrollbar flex h-full w-full shrink-0 grow-0 basis-full flex-col overflow-y-auto px-5 pt-4 pb-56 [&>*]:shrink-0">
@@ -171,6 +222,26 @@ export default function SessionPage() {
                   i === page ? 'h-2 w-2 bg-fg' : beaten[i] ? 'h-1.5 w-1.5 bg-fg' : 'h-1.5 w-1.5 bg-faint'
                 }`}
               />
+            </button>
+          ))}
+        </div>
+      )}
+      {replacing && (
+        <div className="fixed inset-x-0 bottom-0 z-20 max-h-[60%] overflow-y-auto rounded-t-[28px] border-t border-line bg-panel px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+          <div className="relative flex h-12 items-center justify-center">
+            <span className="text-sm">入れ替える種目</span>
+            <button onClick={() => setReplacing(null)} aria-label="閉じる" className="absolute right-0 flex h-11 w-11 items-center justify-center text-dim">
+              <Icon name="down" />
+            </button>
+          </div>
+          {unused.map((e) => (
+            <button
+              key={e.id}
+              onClick={() => void replaceExercise(replacing, e)}
+              className="flex h-14 w-full items-center justify-between border-b border-line text-left transition active:text-dim"
+            >
+              <span className="truncate">{e.name}</span>
+              <Icon name="arrow" size={18} className="shrink-0 text-faint" />
             </button>
           ))}
         </div>
