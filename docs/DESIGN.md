@@ -97,7 +97,7 @@
 
 ## 5. データモデル
 ```
-settings        user_id, body_weight_kg, ez_bar_kg(既定10), smith_bar_kg, measure_interval_days, height_cm(null可)
+settings        user_id, body_weight_kg, ez_bar_kg(既定10), smith_bar_kg, measure_interval_days, height_cm(null可), sex(male|female 既定 male)
 exercises       id, user_id, name, equipment(barbell|ez|dumbbell|machine|bodyweight),
                 weight_step, target_reps, main_sets(既定5), pyramid(既定true),
                 backoff_ratio(既定0.6), sort_order, archived
@@ -122,7 +122,8 @@ sets            id, session_exercise_id, set_no, kind(main|backoff),
 文言は最小。数値・アイコン中心。
 
 ### ホーム
-- 中央に「次にやるメニュー」（未実施 or 最後に行ってから一番空いているもの）の線画。タップで開始
+- 中央に全身の 3D ワイヤーフレーム（履歴と同じ Figure3D）。「次にやるメニュー」（未実施 or 最後に行ってから一番空いているもの）で鍛える部位を白く明滅させ、挑戦度でモーションが変わる（0.7 以上は走る、0.3 以上は歩く、それ未満は立つ）。スワイプで回転、タップでモーション切り替え。three.js の読み込み中は従来の線画を出す
+- その下の「NEXT メニュー名 →」ボタンで開始
 - 下にメニューの円形アイコン。前回日付を小さく
 - タップ → 当日のセッション開始（同日に既存があれば再開）
 
@@ -197,10 +198,12 @@ sets            id, session_exercise_id, set_no, kind(main|backoff),
 - からだ画面の推移（行をタップ）にも「目標 X · あと Y」を出す
 
 ### 履歴
-- 上部に全身の 3D ワイヤーフレーム（src/ui/Figure3D.tsx）。three.js でリグ付き人体モデル（Mixamo「X Bot」。three.js の examples から取得し、scripts/slim-model.mjs で idle/walk だけ残して約2.2MB に。public/models/xbot.glb）を白い線で描き、歩かせる。履歴を開いたときだけ読み込む（lazy）。PWA のプリキャッシュに含める
+- 上部に全身の 3D ワイヤーフレーム（src/ui/Figure3D.tsx）。three.js でリグ付き人体モデル（Mixamo「X Bot」。three.js の examples から取得し、scripts/slim-model.mjs で idle/walk/run だけ残して約2.2MB に。public/models/xbot.glb）を白い線で描き、歩かせる。履歴を開いたときだけ読み込む（lazy）。PWA のプリキャッシュに含める
   - 左右のスワイプで回転、放すと惰性、触らなければゆっくり自転。奥は霧で薄く手前は濃く
   - 計測値は骨の X/Z スケール（太さ）に写す。目標に対する今の比を 1.5 倍に誇張し 0.85〜1.2 に収める。子の骨は親の分を打ち消す。近似であり cm に忠実ではない
   - 足りない部位は、頂点の主な骨がその部位の骨なら白く明滅、ほかは灰（三角形を2グループに分け材質を2つにする）
+  - タップでモーションを切り替える（idle → walk → run、0.4秒でクロスフェード）。モーションを増やすには Mixamo から FBX を取得して glb に変換し、scripts/slim-model.mjs の残すリストに名前を足す
+  - 体型は設定の「体型」（男性 / 女性）。男性は骨のスケールのプリセットで肩を広く厚く、胸・首・腕・脚を太く、腰を細くする（X Bot 自体は中性的）。計測の比はその上に掛ける
   - 減速モーション設定では立ち姿（idle）で止める
   - Mixamo のキャラクターはアプリ内での利用は無償で可。単体での再配布はしない
 - 上部に累計（上記）
@@ -210,7 +213,7 @@ sets            id, session_exercise_id, set_no, kind(main|backoff),
 
 ### 初回チュートリアル（/welcome）
 - メニューが1つもなく未完了なら自動で表示。一方通行
-- はじめに → 体重と身長 → メニュー作成（部位 → 種目 → 順番と名前） → 使い方（5枚）
+- はじめに → 体重と身長と体型 → メニュー作成（部位 → 種目 → 順番と名前） → 使い方（5枚）
 - 設定の「使い方を見る」で使い方だけ再表示（/welcome?howto）
 
 ### メニュー作成（/menu/new, /menu/:id）
@@ -228,7 +231,7 @@ sets            id, session_exercise_id, set_no, kind(main|backoff),
 - お知らせ: 最終計測日 + 間隔（設定で 1/2/4 週、既定 2 週）を過ぎるとホームに「そろそろ計測の時期です」。× で当日は非表示
 
 ### 設定
-- 体重 / 身長（プロポーション目標の基準。未設定は「—」）/ EZバー / スミスバー（タップで増減。体重は1kg単位）/ 計測の間隔
+- 体重 / 身長（プロポーション目標の基準。未設定は「—」）/ 体型（男性 / 女性。全身図の骨格プリセット）/ EZバー / スミスバー（タップで増減。体重は1kg単位）/ 計測の間隔
 - メニュー一覧（タップでメニュー編集へ）
 - 種目の細かい設定（部位・器具・刻み・回数・セット・ピラミッド・バックオフ）
 - 数値はすべて ±ボタンか候補から選ぶ。キーボードは名前・コメント・ログインのみ

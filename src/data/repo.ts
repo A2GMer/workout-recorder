@@ -52,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
   smith_bar_kg: 20,
   measure_interval_days: 14,
   height_cm: null,
+  sex: 'male',
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -63,6 +64,7 @@ export async function getSettings(): Promise<Settings> {
     smith_bar_kg: s?.smith_bar_kg ?? DEFAULT_SETTINGS.smith_bar_kg,
     measure_interval_days: s?.measure_interval_days ?? DEFAULT_SETTINGS.measure_interval_days,
     height_cm: s?.height_cm ?? null,
+    sex: s?.sex ?? DEFAULT_SETTINGS.sex,
   }
 }
 

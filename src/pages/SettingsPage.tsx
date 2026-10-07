@@ -187,6 +187,21 @@ export default function SettingsPage() {
             />
             <StepField label="EZバー" unit="kg" step={0.5} min={0} value={settings.ez_bar_kg} onChange={(v) => saveSettings({ ez_bar_kg: v })} />
             <StepField label="スミスバー" unit="kg" step={0.5} min={0} value={settings.smith_bar_kg} onChange={(v) => saveSettings({ smith_bar_kg: v })} />
+            <div className="flex h-14 items-center justify-between gap-3">
+              <span className="text-sm text-dim">体型</span>
+              <span className="flex gap-1 rounded-xl bg-chip p-1">
+                {(['male', 'female'] as const).map((sx) => (
+                  <button
+                    key={sx}
+                    onClick={() => saveSettings({ sex: sx })}
+                    aria-pressed={settings.sex === sx}
+                    className={`h-9 rounded-lg px-4 text-sm transition ${settings.sex === sx ? 'bg-fg text-bg' : 'text-dim'}`}
+                  >
+                    {sx === 'male' ? '男性' : '女性'}
+                  </button>
+                ))}
+              </span>
+            </div>
             {settings.height_cm === null && (
               <p className="pb-2 text-xs leading-5 text-faint">身長を入れると、履歴に体のプロポーション目標が出ます</p>
             )}

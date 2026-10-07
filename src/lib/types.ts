@@ -1,6 +1,8 @@
 export type Equipment = 'barbell' | 'ez' | 'smith' | 'dumbbell' | 'machine' | 'bodyweight'
 export type SetKind = 'main' | 'backoff'
 export type BodyPart = 'chest' | 'back' | 'shoulders' | 'arms' | 'legs' | 'core'
+/** 全身図の体型プリセット */
+export type Sex = 'male' | 'female'
 
 export const BODY_PART_LABEL: Record<BodyPart, string> = {
   chest: '胸',
@@ -26,6 +28,8 @@ export interface Settings extends Synced {
   measure_interval_days: number
   /** 身長 cm。プロポーション目標の基準。未設定は null */
   height_cm: number | null
+  /** 全身図の体型 */
+  sex: Sex
 }
 
 export interface Exercise extends Synced {

@@ -13,7 +13,7 @@ console.log('nodes:', root.listNodes().map((n) => n.getName()).join(', '))
 console.log('meshes:', root.listMeshes().map((m) => m.getName() + ':' + m.listPrimitives().reduce((s, p) => s + p.getIndices().getCount() / 3, 0)).join(', '))
 // 使うアニメーションだけ残す。スケールのトラックは捨てる（骨の太さをこちらで決めるため）
 for (const a of root.listAnimations()) {
-  if (!['idle', 'walk'].includes(a.getName())) { a.dispose(); continue }
+  if (!['idle', 'walk', 'run'].includes(a.getName())) { a.dispose(); continue }
   for (const ch of a.listChannels()) if (ch.getTargetPath() === 'scale') ch.dispose()
 }
 // ワイヤーフレーム表示に不要な属性を捨てる

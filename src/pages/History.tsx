@@ -22,16 +22,16 @@ function Proportion() {
     const [latest] = await listMeasurements()
     const settings = await getSettings()
     const targets = idealTargets(latest ?? null, settings.height_cm)
-    return { latest: latest ?? null, height: settings.height_cm, targets, figure: figureOf(latest ?? null, targets) }
+    return { latest: latest ?? null, height: settings.height_cm, sex: settings.sex, targets, figure: figureOf(latest ?? null, targets) }
   })
   if (!data) return null
-  const { latest, height, targets, figure } = data
+  const { latest, height, sex, targets, figure } = data
   const next = proposals(targets).slice(0, 3)
   const ready = !!height && !!latest
   return (
     <div className="flex flex-col items-center pt-2 pb-8">
       <Suspense fallback={<div className="h-80 w-full" />}>
-        <Figure3D figure={figure} showTarget={ready} className="h-80 w-full" />
+        <Figure3D figure={figure} showTarget={ready} sex={sex} className="h-80 w-full" />
       </Suspense>
       {!height ? (
         <button onClick={() => nav('/settings')} className="mt-2 h-11 px-4 text-xs text-dim">

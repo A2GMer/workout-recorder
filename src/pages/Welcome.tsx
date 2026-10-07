@@ -106,6 +106,18 @@ function BodyStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }
       <div className="flex flex-1 flex-col items-center justify-center gap-10">
         <BigStepper label="体重" unit="kg" value={String(bw)} onAdd={addWeight} />
         <BigStepper label="身長" unit="cm" value={settings.height_cm === null ? '—' : String(settings.height_cm)} onAdd={addHeight} />
+        <div className="flex gap-1 rounded-xl bg-chip p-1">
+          {(['male', 'female'] as const).map((sx) => (
+            <button
+              key={sx}
+              onClick={() => void save<Settings>('settings', { ...settings, sex: sx })}
+              aria-pressed={settings.sex === sx}
+              className={`h-10 rounded-lg px-6 text-sm transition ${settings.sex === sx ? 'bg-fg text-bg' : 'text-dim'}`}
+            >
+              {sx === 'male' ? '男性' : '女性'}
+            </button>
+          ))}
+        </div>
       </div>
       <PrimaryButton onClick={onNext}>次へ</PrimaryButton>
     </div>

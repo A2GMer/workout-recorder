@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   allImproved,
   getSettings,
@@ -14,11 +14,15 @@ import {
   sessionProgress,
   startSession,
 } from '../data/repo'
-import { idealTargets, proposals } from '../lib/ideal'
+import { figureOf, idealTargets, proposals, type DimKey } from '../lib/ideal'
 import { isMeasureDue } from '../lib/measure'
 import { md, num } from '../lib/format'
 import { fix } from '../lib/progression'
-import { MEASURE_ITEMS, type Measurement } from '../lib/types'
+import { MEASURE_ITEMS, type BodyPart, type Measurement } from '../lib/types'
+import { DIMS_OF_PART, type Motion } from '../ui/Figure3D'
+
+// 3D（three.js とモデル）は別チャンク。読み込むまでは線画を出す
+const Figure3D = lazy(() => import('../ui/Figure3D'))
 import { BodyArt } from '../ui/BodyArt'
 import { Icon } from '../ui/Icon'
 import { IconButton, TopBar } from '../ui/TopBar'
@@ -48,9 +52,12 @@ export default function Home() {
   const body = useLiveQuery(async () => {
     const list = await listMeasurements()
     const settings = await getSettings()
+    const targets = idealTargets(list[0] ?? null, settings.height_cm)
     return {
       list,
       height: settings.height_cm,
+      sex: settings.sex,
+      figure: figureOf(list[0] ?? null, targets),
       due: isMeasureDue(list[0]?.date ?? null, settings.measure_interval_days, localDate()),
     }
   })
@@ -64,6 +71,14 @@ export default function Home() {
 
   // 初回（メニューが1つもなく、チュートリアル未完了）はチュートリアルへ
   if (routines?.length === 0 && !isOnboarded()) return <Navigate to="/welcome" replace />
+
+  const art = (
+    <BodyArt
+      parts={next?.profile.parts ?? []}
+      intensity={next?.profile.intensity ?? 0.2}
+      className="aspect-square max-h-[340px] min-h-0 w-full max-w-[340px] flex-1 text-fg"
+    />
+  )
 
   async function start(id: string) {
     nav(`/s/${await startSession(id)}`)
@@ -108,26 +123,37 @@ export default function Home() {
         </div>
       )}
 
-      <button
-        onClick={() => next && start(next.id)}
-        disabled={!next}
-        aria-label={next ? `${next.name}を開始` : undefined}
-        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-8 py-6"
-      >
-        <BodyArt
-          parts={next?.profile.parts ?? []}
-          intensity={next?.profile.intensity ?? 0.2}
-          className="aspect-square max-h-[340px] min-h-0 w-full max-w-[340px] flex-1 text-fg"
-        />
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-8 py-4">
+        {body ? (
+          <Suspense fallback={art}>
+            <Figure3D
+              figure={body.figure}
+              showTarget={!!body.height && body.list.length > 0}
+              emphasis={emphasisOf(next?.profile.parts ?? [])}
+              sex={body.sex}
+              motion={motionFor(next?.profile.intensity ?? 0)}
+              className="aspect-square max-h-[340px] min-h-0 w-full max-w-[340px] flex-1 text-fg"
+            />
+          </Suspense>
+        ) : (
+          art
+        )}
         {next && (
-          <span className="flex flex-col items-center gap-1">
+          <button
+            onClick={() => start(next.id)}
+            aria-label={`${next.name}を開始`}
+            className="flex flex-col items-center gap-1 rounded-2xl px-6 py-2 transition active:bg-panel"
+          >
             <span className="text-[11px] tracking-[0.2em] text-dim">NEXT</span>
-            <span className="text-lg">{next.name}</span>
+            <span className="flex items-center gap-2 text-lg">
+              {next.name}
+              <Icon name="arrow" size={18} className="text-dim" />
+            </span>
             {/* 今日の見どころ: 重量が上がる種目数と、守っている連続更新 */}
             <span className="h-4 text-[11px] leading-4 text-dim">{outlook(next.profile.weightUps, next.streak)}</span>
-          </span>
+          </button>
         )}
-      </button>
+      </div>
 
       {body && <BodyStrip list={body.list} height={body.height} onOpen={() => nav('/body')} onMeasure={() => nav('/body/measure')} onHeight={() => nav('/settings')} />}
 
@@ -303,6 +329,16 @@ const MARQUEE_SPEED = 28 // px/秒
 
 /** ホーム下部の連なりに出す直近セッション数 */
 const CHAIN_LENGTH = 12
+
+/** 今日鍛える部位 → 強調する骨の部位 */
+function emphasisOf(parts: BodyPart[]): Set<DimKey> {
+  return new Set(parts.flatMap((p) => DIMS_OF_PART[p]))
+}
+
+/** 挑戦度が高いほど速く動く: 重量アップが多い日は走る */
+function motionFor(intensity: number): Motion {
+  return intensity >= 0.7 ? 'run' : intensity >= 0.3 ? 'walk' : 'idle'
+}
 
 /** NEXT の下の一言。何もなければ空（初回など） */
 function outlook(weightUps: number, streak: number): string {
