@@ -17,8 +17,23 @@ import type { BodyPart, Sex } from '../lib/types'
 const MODEL_URL = '/models/xbot.glb'
 const EXAGGERATE = 1.5
 const FPS = 30
+/** モデルに入っているモーション（元の X Bot は agree / headShake / idle / run / sad_pose / sneak_pose / walk。残すのは scripts/slim-model.mjs で決める） */
 export const MOTIONS = ['idle', 'walk', 'run'] as const
 export type Motion = (typeof MOTIONS)[number]
+
+/**
+ * 部位ごとの背景モーション。モデルに該当するクリップがなければ idle に落ちる。
+ * いまのモデルには運動のモーションがないので全部 idle。Mixamo から追加したらここに名前を書く
+ * （例: chest: 'pushup', legs: 'squat'）
+ */
+export const MOTION_OF_PART: Record<BodyPart, string> = {
+  chest: 'idle',
+  back: 'idle',
+  shoulders: 'idle',
+  arms: 'idle',
+  legs: 'idle',
+  core: 'idle',
+}
 
 /** 計測の項目 → Mixamo の骨。左右は両方 */
 const BONES: Record<DimKey, string[]> = {
@@ -91,8 +106,8 @@ export function Figure3D({
   /** 強調する部位。省略時は figure の足りない部位 */
   emphasis?: Set<DimKey>
   sex: Sex
-  /** 最初のモーション。タップで次へ */
-  motion?: Motion
+  /** 最初のモーション。タップで次へ。モデルにない名前なら idle */
+  motion?: string
   className?: string
 }) {
   const box = useRef<HTMLDivElement>(null)
@@ -245,7 +260,8 @@ export function Figure3D({
           const clip = gltf.animations.find((c) => c.name.toLowerCase() === name)
           if (clip) actions.set(name, mixer.clipAction(clip))
         }
-        let current: Motion = still ? 'idle' : (chosen.current ?? motion)
+        const wanted = chosen.current ?? motion
+        let current: Motion = still ? 'idle' : actions.has(wanted as Motion) ? (wanted as Motion) : 'idle'
         let active = actions.get(current) ?? [...actions.values()][0]
         active?.play()
         if (still && active) active.paused = true

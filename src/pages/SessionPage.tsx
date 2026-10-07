@@ -19,7 +19,7 @@ import { figureOf, idealTargets } from '../lib/ideal'
 import { fmtVolume, md, num } from '../lib/format'
 import { fix, volume } from '../lib/progression'
 import type { Exercise, Session, SessionExercise, Settings } from '../lib/types'
-import { DIMS_OF_PART } from '../ui/Figure3D'
+import { DIMS_OF_PART, MOTION_OF_PART } from '../ui/Figure3D'
 
 // 背景の 3D は別チャンク
 const Figure3D = lazy(() => import('../ui/Figure3D'))
@@ -135,6 +135,7 @@ export default function SessionPage() {
   const current = panels[page]
   // 背景の全身図で強調する部位 = 開いている種目の部位
   const emphasis = new Set(current?.ex.body_part ? DIMS_OF_PART[current.ex.body_part] : [])
+  const bgMotion = current?.ex.body_part ? MOTION_OF_PART[current.ex.body_part] : 'idle'
   // 前回を超えた種目のドットは白く灯る。進むほど灯りが増える
   const beaten = panels.map((p) => {
     if (!p.sets.length) return false
@@ -154,7 +155,7 @@ export default function SessionPage() {
       {/* 背景: 対象部位を強調した全身図を薄く。操作は受けない */}
       <div className="pointer-events-none absolute inset-x-0 top-14 bottom-0 flex items-center justify-center opacity-25">
         <Suspense fallback={null}>
-          <Figure3D figure={figure} showTarget={hasBody} emphasis={emphasis} sex={settings.sex} motion="idle" className="h-[62%] w-full max-w-[420px]" />
+          <Figure3D figure={figure} showTarget={hasBody} emphasis={emphasis} sex={settings.sex} motion={bgMotion} className="h-[62%] w-full max-w-[420px]" />
         </Suspense>
       </div>
       <TopBar
