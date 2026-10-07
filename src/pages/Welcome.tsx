@@ -138,11 +138,11 @@ function HowTo({ onDone }: { onDone: () => void }) {
     },
     {
       title: '左右にスワイプで次の種目',
-      body: '上の数字は今日のボリューム。前回を超えるまでの進み具合を細い線で表示します。',
+      body: '上の数字は今日のボリューム（重量×回数の合計）。前回をあとどれだけで超えるかと、進み具合の線を表示します。',
       art: (
         <div className="flex flex-col items-center">
           <span className="text-[56px] leading-none">1,575</span>
-          <span className="mt-2 text-xs text-dim">/ 2,100</span>
+          <span className="mt-2 text-xs text-dim">あと 526</span>
           <div className="mt-4 h-px w-40 bg-line">
             <div className="h-px w-3/4 bg-fg" />
           </div>

@@ -65,10 +65,25 @@ describe('suggest', () => {
     expect(s.achieved).toBe(false)
   })
 
-  it('セット数不足は未達扱い', () => {
+  it('セット数不足は未達扱い: 足りないセットを目標回数で足すだけ（済んだセットは増やさない）', () => {
     const s = suggest(bench, prev({ main: sets(100, 3, 3, 3, 3) }))
     expect(s.achieved).toBe(false)
     expect(s.mainWeight).toBe(100)
+    expect(s.mainReps).toEqual([3, 3, 3, 3, 3])
+    expect(suggest(bench, prev({ main: sets(100, 3, 3, 2, 2) })).mainReps).toEqual([3, 3, 2, 2, 3])
+  })
+
+  it('回数は揃ったが重量が揃っていない → 最大重量で目標回数（回数は増やさない）', () => {
+    const s = suggest(bench, prev({ main: [...sets(100, 3, 3, 3), ...sets(95, 3, 3)] }))
+    expect(s.achieved).toBe(false)
+    expect(s.mainWeight).toBe(100)
+    expect(s.mainReps).toEqual([3, 3, 3, 3, 3])
+  })
+
+  it('+1 しても目標回数は超えない', () => {
+    const s = suggest(bench, prev({ main: sets(100, 3, 3, 3, 3, 2) }))
+    expect(s.mainReps).toEqual([3, 3, 3, 3, 3])
+    expect(Math.max(...s.mainReps)).toBeLessThanOrEqual(bench.target_reps)
   })
 
   it('チート分を除いた厳密回数が目標に届かなければ未達', () => {

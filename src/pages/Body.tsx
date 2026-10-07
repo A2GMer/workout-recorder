@@ -7,6 +7,7 @@ import { nextMeasureDate } from '../lib/measure'
 import { fix } from '../lib/progression'
 import { MEASURE_ITEMS, type MeasureKey, type Measurement } from '../lib/types'
 import { PrimaryButton } from '../ui/Flow'
+import { Sparkline } from '../ui/Sparkline'
 import { Stepper, type Editor } from '../ui/Stepper'
 import { TopBar } from '../ui/TopBar'
 
@@ -19,15 +20,17 @@ function Delta({ value }: { value: number | null }) {
 
 const diff = (a?: number | null, b?: number | null) => (a == null || b == null ? null : fix(a - b))
 
-/** /body: 最新の計測と、前回・初回からの変化 */
+/** /body: 最新の計測と、前回・初回からの変化。行をタップでその項目の推移 */
 export default function Body() {
   const nav = useNavigate()
   const data = useLiveQuery(async () => ({ list: await listMeasurements(), settings: await getSettings() }))
+  const [open, setOpen] = useState<MeasureKey | null>(null)
   if (!data) return null
   const { list, settings } = data
   const [latest, prev] = list
   const first = list[list.length - 1]
   const next = nextMeasureDate(latest?.date ?? null, settings.measure_interval_days)
+  const hasHistory = list.length > 1
 
   return (
     <div className="flex h-full flex-col">
@@ -42,26 +45,66 @@ export default function Body() {
               <span className="w-16 text-right">{list.length > 2 ? md(first.date) : ''}</span>
             </div>
             {MEASURE_ITEMS.map((item) =>
-              item.keys.map((k, i) => (
-                <div key={k} className="flex h-12 items-center border-b border-line text-sm">
-                  <span className="min-w-0 flex-1 truncate text-dim">
-                    {i === 0 ? item.label : ''}
-                    {item.keys.length > 1 && <span className="ml-2 text-faint">{SIDE[i]}</span>}
-                  </span>
-                  <span className="w-16 text-right text-base">
-                    {latest[k] ?? '—'}
-                    <span className="ml-0.5 text-[10px] text-faint">{item.unit}</span>
-                  </span>
-                  <span className="w-16 text-right text-xs">{prev && <Delta value={diff(latest[k], prev[k])} />}</span>
-                  <span className="w-16 text-right text-xs">{list.length > 2 && <Delta value={diff(latest[k], first[k])} />}</span>
-                </div>
-              )),
+              item.keys.map((k, i) => {
+                const isOpen = open === k
+                return (
+                  <div key={k} className="border-b border-line">
+                    <button
+                      onClick={() => hasHistory && setOpen(isOpen ? null : k)}
+                      aria-expanded={isOpen}
+                      className="flex h-12 w-full items-center text-left text-sm"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-dim">
+                        {i === 0 ? item.label : ''}
+                        {item.keys.length > 1 && <span className="ml-2 text-faint">{SIDE[i]}</span>}
+                      </span>
+                      <span className={`w-16 text-right text-base ${isOpen ? 'text-fg' : ''}`}>
+                        {latest[k] ?? '—'}
+                        <span className="ml-0.5 text-[10px] text-faint">{item.unit}</span>
+                      </span>
+                      <span className="w-16 text-right text-xs">{prev && <Delta value={diff(latest[k], prev[k])} />}</span>
+                      <span className="w-16 text-right text-xs">{list.length > 2 && <Delta value={diff(latest[k], first[k])} />}</span>
+                    </button>
+                    {isOpen && <Trend list={list} k={k} unit={item.unit} />}
+                  </div>
+                )
+              }),
             )}
-            <p className="mt-3 text-xs leading-5 text-faint">中央の列は前回から、右の列は初回からの変化</p>
+            <p className="mt-3 text-xs leading-5 text-faint">
+              中央の列は前回から、右の列は初回からの変化{hasHistory ? '。行をタップで推移' : ''}
+            </p>
           </>
         )}
       </div>
       <PrimaryButton onClick={() => nav('/body/measure')}>計測する</PrimaryButton>
+    </div>
+  )
+}
+
+/** 1項目の推移: 折れ線 + 計測ごとの値（古い → 新しい） */
+function Trend({ list, k, unit }: { list: Measurement[]; k: MeasureKey; unit: string }) {
+  // 値のある計測だけ、古い順に
+  const points = [...list].reverse().flatMap((m) => (m[k] == null ? [] : [{ date: m.date, value: m[k] }]))
+  if (points.length < 2) return <p className="pb-4 text-xs text-faint">まだ比べられる記録がありません</p>
+  return (
+    <div className="pb-4">
+      <Sparkline values={points.map((p) => p.value)} className="mt-1 w-full text-fg" />
+      <div className="no-scrollbar mt-3 flex gap-5 overflow-x-auto">
+        {points.map((p, i) => {
+          const last = i === points.length - 1
+          const d = i ? diff(p.value, points[i - 1].value) : null
+          return (
+            <div key={p.date} className="flex shrink-0 flex-col items-end">
+              <span className={`text-sm leading-none ${last ? 'text-fg' : 'text-dim'}`}>
+                {num(p.value)}
+                <span className="ml-0.5 text-[10px] text-faint">{unit}</span>
+              </span>
+              <span className="mt-1.5 text-[10px] leading-none text-faint">{md(p.date)}</span>
+              <span className="mt-1 h-3 text-[10px] leading-none">{d !== null && <Delta value={d} />}</span>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

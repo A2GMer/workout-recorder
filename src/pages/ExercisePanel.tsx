@@ -243,8 +243,9 @@ export function ExercisePanel({
       {/* ボリューム */}
       <div className="flex flex-col items-center pt-4">
         <span className="text-[56px] leading-none tracking-tight">{fmtVolume(actual)}</span>
-        <span className="mt-2 h-4 text-xs leading-4 text-dim">
-          {delta === null ? '' : delta > 0 ? `+${fmtVolume(delta)}` : `/ ${fmtVolume(sugg.prevVolume!)}`}
+        {/* 前回比: 超えたら白で +N、まだなら「あと N」（前回 +1 まで） */}
+        <span className={`mt-2 h-4 text-xs leading-4 ${delta !== null && delta > 0 ? 'text-fg' : 'text-dim'}`}>
+          {delta === null ? '' : delta > 0 ? `+${fmtVolume(delta)}` : `あと ${fmtVolume(Math.max(1, -delta + 1))}`}
         </span>
         {sugg.prevVolume !== null && (
           <div className="mt-4 h-px w-40 bg-line">
@@ -253,7 +254,7 @@ export function ExercisePanel({
         )}
         <p className="mt-4 text-center text-xs leading-5 text-dim">
           {prev
-            ? `${md(prev.session.date)}　${fmtSets(ex.equipment, [...prev.prev.main, ...prev.prev.backoff])}`
+            ? `${md(prev.session.date)}　${fmtSets(ex.equipment, [...prev.prev.main, ...prev.prev.backoff])} = ${fmtVolume(sugg.prevVolume!)}`
             : '初回'}
         </p>
       </div>

@@ -86,14 +86,25 @@ export function suggest(ex: Exercise, prev: PrevPerformance | null): Suggestion 
     return { mainWeight: fix(maxW + increase), mainReps: target, prevVolume, achieved, increase }
   }
 
-  // 未達: 重量据え置き、一番少ないセットを +1
-  const reps = target.map((t, i) => prev.main[i]?.reps ?? t)
+  // 未達: 重量は最大重量で据え置き。増やすのは「一番小さい1歩」だけ（低回数を崩さない）
+  const unachieved = { mainWeight: maxW, prevVolume, achieved, increase: 0 }
+  const done = prev.main.slice(0, ex.main_sets)
+  // 1) セット数が足りない → 足りないセットを目標回数で足す（済んだセットは増やさない）
+  if (done.length < ex.main_sets) {
+    return { ...unachieved, mainReps: target.map((t, i) => done[i]?.reps ?? t) }
+  }
+  // 2) 回数は全セット届いたが重量が揃っていない → 最大重量で目標回数
+  if (done.every((s) => s.reps >= ex.target_reps)) {
+    return { ...unachieved, mainReps: target }
+  }
+  // 3) 回数が足りないセットがある → 一番少ないセットを +1（目標回数は超えない）
+  const reps = done.map((s) => s.reps)
   let lo = 0
   reps.forEach((r, i) => {
     if (r < reps[lo]) lo = i
   })
-  reps[lo] += 1
-  return { mainWeight: maxW, mainReps: reps, prevVolume, achieved, increase: 0 }
+  reps[lo] = Math.min(reps[lo] + 1, ex.target_reps)
+  return { ...unachieved, mainReps: reps }
 }
 
 /**
