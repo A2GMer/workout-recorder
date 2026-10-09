@@ -19,7 +19,7 @@ import { figureOf, idealTargets } from '../lib/ideal'
 import { fmtVolume, md, num } from '../lib/format'
 import { fix, volume } from '../lib/progression'
 import type { Exercise, Session, SessionExercise, Settings } from '../lib/types'
-import { DIMS_OF_PART, MOTION_OF_PART } from '../ui/Figure3D'
+import { DIMS_OF_PART, MOTION_OF_PART, RANDOM } from '../ui/Figure3D'
 
 // 背景の 3D は別チャンク
 const Figure3D = lazy(() => import('../ui/Figure3D'))
@@ -135,7 +135,7 @@ export default function SessionPage() {
   const current = panels[page]
   // 背景の全身図で強調する部位 = 開いている種目の部位
   const emphasis = new Set(current?.ex.body_part ? DIMS_OF_PART[current.ex.body_part] : [])
-  const bgMotion = current?.ex.body_part ? MOTION_OF_PART[current.ex.body_part] : 'idle'
+  const bgMotion = (current?.ex.body_part && MOTION_OF_PART[current.ex.body_part]) || RANDOM
   // 前回を超えた種目のドットは白く灯る。進むほど灯りが増える
   const beaten = panels.map((p) => {
     if (!p.sets.length) return false

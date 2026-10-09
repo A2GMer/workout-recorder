@@ -19,7 +19,7 @@ import { isMeasureDue } from '../lib/measure'
 import { md, num } from '../lib/format'
 import { fix } from '../lib/progression'
 import { MEASURE_ITEMS, type BodyPart, type Measurement } from '../lib/types'
-import { DIMS_OF_PART, type Motion } from '../ui/Figure3D'
+import { DIMS_OF_PART, RANDOM } from '../ui/Figure3D'
 
 // 3D（three.js とモデル）は別チャンク。読み込むまでは線画を出す
 const Figure3D = lazy(() => import('../ui/Figure3D'))
@@ -131,7 +131,7 @@ export default function Home() {
               showTarget={!!body.height && body.list.length > 0}
               emphasis={emphasisOf(next?.profile.parts ?? [])}
               sex={body.sex}
-              motion={motionFor(next?.profile.intensity ?? 0)}
+              motion={RANDOM}
               className="aspect-square max-h-[340px] min-h-0 w-full max-w-[340px] flex-1 text-fg"
             />
           </Suspense>
@@ -333,11 +333,6 @@ const CHAIN_LENGTH = 12
 /** 今日鍛える部位 → 強調する骨の部位 */
 function emphasisOf(parts: BodyPart[]): Set<DimKey> {
   return new Set(parts.flatMap((p) => DIMS_OF_PART[p]))
-}
-
-/** 挑戦度が高いほど速く動く: 重量アップが多い日は走る */
-function motionFor(intensity: number): Motion {
-  return intensity >= 0.7 ? 'run' : intensity >= 0.3 ? 'walk' : 'idle'
 }
 
 /** NEXT の下の一言。何もなければ空（初回など） */

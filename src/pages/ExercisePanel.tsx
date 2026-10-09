@@ -15,6 +15,7 @@ import { fmtSets, fmtVolume, fmtWeight, md, num } from '../lib/format'
 import type { Exercise, Session, SessionExercise, Settings, SetKind, WorkSet } from '../lib/types'
 import type { Editor } from '../ui/Stepper'
 import { Icon } from '../ui/Icon'
+import { FatigueGauge } from '../ui/FatigueGauge'
 
 type Field = 'weight' | 'reps' | 'cheat'
 interface Draft {
@@ -359,18 +360,12 @@ export function ExercisePanel({
       {/* 疲労度 */}
       <div className="mt-8 flex items-center gap-4">
         <span className="text-xs text-dim">軽</span>
-        <input
-          type="range"
-          min={0}
-          max={100}
+        <FatigueGauge
           value={fatigue}
-          onChange={(e) => {
-            setFatigue(Number(e.target.value))
+          onChange={(v) => {
+            setFatigue(v)
             later()
           }}
-          style={{ '--p': `${fatigue}%` } as React.CSSProperties}
-          className="gauge flex-1"
-          aria-label="疲労度"
         />
         <span className="text-xs text-dim">重</span>
       </div>

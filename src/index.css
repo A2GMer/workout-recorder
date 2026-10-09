@@ -57,6 +57,35 @@ p {
   padding-top: env(safe-area-inset-top);
 }
 
+/* 疲労ゲージ（背の高い版）: バーと曲線は SVG が描くので、input はつまみだけを出す */
+input[type='range'].gauge-tall {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  margin: 0;
+}
+input[type='range'].gauge-tall::-webkit-slider-runnable-track {
+  height: 2px;
+  background: transparent;
+}
+input[type='range'].gauge-tall::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 28px;
+  height: 64px;
+  margin-top: -31px;
+  background: transparent;
+}
+input[type='range'].gauge-tall::-moz-range-track {
+  height: 2px;
+  background: transparent;
+}
+input[type='range'].gauge-tall::-moz-range-thumb {
+  width: 28px;
+  height: 64px;
+  border: 0;
+  background: transparent;
+}
+
 /* 疲労ゲージ: 細い線と白い点 */
 input[type='range'].gauge {
   -webkit-appearance: none;

@@ -21,19 +21,14 @@ const FPS = 30
 export const MOTIONS = ['idle', 'walk', 'run'] as const
 export type Motion = (typeof MOTIONS)[number]
 
+/** 'random' を渡すと、入っているモーションを無作為に選び、8〜15 秒ごとに別のものへ移る */
+export const RANDOM = 'random'
+
 /**
- * 部位ごとの背景モーション。モデルに該当するクリップがなければ idle に落ちる。
- * いまのモデルには運動のモーションがないので全部 idle。Mixamo から追加したらここに名前を書く
- * （例: chest: 'pushup', legs: 'squat'）
+ * 部位ごとの背景モーション。書いていない部位（いまは全部）はランダム。
+ * モデルに運動のモーションを追加したらここに名前を書く（例: chest: 'pushup', legs: 'squat'）
  */
-export const MOTION_OF_PART: Record<BodyPart, string> = {
-  chest: 'idle',
-  back: 'idle',
-  shoulders: 'idle',
-  arms: 'idle',
-  legs: 'idle',
-  core: 'idle',
-}
+export const MOTION_OF_PART: Partial<Record<BodyPart, string>> = {}
 
 /** 計測の項目 → Mixamo の骨。左右は両方 */
 const BONES: Record<DimKey, string[]> = {
@@ -106,7 +101,7 @@ export function Figure3D({
   /** 強調する部位。省略時は figure の足りない部位 */
   emphasis?: Set<DimKey>
   sex: Sex
-  /** 最初のモーション。タップで次へ。モデルにない名前なら idle */
+  /** 最初のモーション。タップで次へ。モデルにない名前なら idle。'random' なら無作為に移り変わる */
   motion?: string
   className?: string
 }) {
@@ -159,6 +154,7 @@ export function Figure3D({
     const lackMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.9, depthWrite: false })
     const disposables: { dispose(): void }[] = [renderer, normalMat, lackMat]
     let mixer: THREE.AnimationMixer | null = null
+    let randomTimer: ReturnType<typeof setTimeout> | undefined
     const emphasized = new Set(emphasisKey ? (emphasisKey.split(',') as DimKey[]) : [])
 
     loadModel()
@@ -260,21 +256,46 @@ export function Figure3D({
           const clip = gltf.animations.find((c) => c.name.toLowerCase() === name)
           if (clip) actions.set(name, mixer.clipAction(clip))
         }
+        const order = MOTIONS.filter((m) => actions.has(m))
+        const randomPick = (not: Motion) => {
+          const rest = order.filter((m) => m !== not)
+          return rest[Math.floor(Math.random() * rest.length)] ?? not
+        }
         const wanted = chosen.current ?? motion
-        let current: Motion = still ? 'idle' : actions.has(wanted as Motion) ? (wanted as Motion) : 'idle'
+        let current: Motion = still
+          ? 'idle'
+          : wanted === RANDOM
+            ? randomPick('idle')
+            : actions.has(wanted as Motion)
+              ? (wanted as Motion)
+              : 'idle'
         let active = actions.get(current) ?? [...actions.values()][0]
         active?.play()
         if (still && active) active.paused = true
-        cycle.current = () => {
-          if (still) return
-          const order = MOTIONS.filter((m) => actions.has(m))
-          const next = order[(order.indexOf(current) + 1) % order.length]
+        const switchTo = (next: Motion) => {
           const nextAction = actions.get(next)!
           nextAction.reset().play()
-          if (active && active !== nextAction) active.crossFadeTo(nextAction, 0.4, false)
+          if (active && active !== nextAction) active.crossFadeTo(nextAction, 0.6, false)
           active = nextAction
           current = next
+        }
+        // ランダム: 8〜15 秒ごとに別のモーションへ（タップで選んだ後は止める）
+        const scheduleRandom = () => {
+          clearTimeout(randomTimer)
+          if (still || chosen.current || motion !== RANDOM) return
+          randomTimer = setTimeout(() => {
+            if (disposed) return
+            switchTo(randomPick(current))
+            scheduleRandom()
+          }, 8000 + Math.random() * 7000)
+        }
+        scheduleRandom()
+        cycle.current = () => {
+          if (still) return
+          const next = order[(order.indexOf(current) + 1) % order.length]
+          switchTo(next)
           chosen.current = next
+          clearTimeout(randomTimer)
         }
         if (import.meta.env.DEV) {
           ;(window as unknown as { __fig: unknown }).__fig = { scene, camera, renderer, root, mixer, cycle: cycle.current, get motion() { return current } }
@@ -307,6 +328,7 @@ export function Figure3D({
     return () => {
       disposed = true
       cancelAnimationFrame(raf)
+      clearTimeout(randomTimer)
       ro.disconnect()
       for (const d of disposables) d.dispose()
       renderer.domElement.remove()
