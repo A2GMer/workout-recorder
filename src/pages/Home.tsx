@@ -23,6 +23,7 @@ import { DIMS_OF_PART, RANDOM } from '../ui/Figure3D'
 
 // 3D（three.js とモデル）は別チャンク。読み込むまでは線画を出す
 const Figure3D = lazy(() => import('../ui/Figure3D'))
+import { Backdrop } from '../ui/Backdrop'
 import { BodyArt } from '../ui/BodyArt'
 import { Icon } from '../ui/Icon'
 import { IconButton, TopBar } from '../ui/TopBar'
@@ -85,7 +86,9 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col overflow-hidden">
+      {/* 背景: 昇る粒子と広がるさざ波 */}
+      <Backdrop className="pointer-events-none absolute inset-0 h-full w-full" />
       <TopBar
         title={md(localDate())}
         side={132}
@@ -123,31 +126,40 @@ export default function Home() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-8 py-4">
-        {body ? (
-          <Suspense fallback={art}>
-            <Figure3D
-              figure={body.figure}
-              showTarget={!!body.height && body.list.length > 0}
-              emphasis={emphasisOf(next?.profile.parts ?? [])}
-              sex={body.sex}
-              motion={RANDOM}
-              className="aspect-square max-h-[340px] min-h-0 w-full max-w-[340px] flex-1 text-fg"
-            />
-          </Suspense>
-        ) : (
-          art
-        )}
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-8 py-4">
+        <div className="rise relative flex aspect-square max-h-[340px] min-h-0 w-full max-w-[340px] flex-1 items-center justify-center">
+          {body ? (
+            <Suspense fallback={art}>
+              <Figure3D
+                figure={body.figure}
+                showTarget={!!body.height && body.list.length > 0}
+                emphasis={emphasisOf(next?.profile.parts ?? [])}
+                sex={body.sex}
+                motion={RANDOM}
+                className="h-full w-full text-fg"
+              />
+            </Suspense>
+          ) : (
+            art
+          )}
+          {/* 足元の輪。ゆっくり呼吸する */}
+          <div className="pointer-events-none absolute bottom-[4%] left-1/2 w-44 -translate-x-1/2">
+            <svg viewBox="0 0 176 16" className="breathe h-4 w-full text-fg" fill="none" stroke="currentColor" aria-hidden="true">
+              <ellipse cx="88" cy="8" rx="86" ry="6" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+            </svg>
+          </div>
+        </div>
         {next && (
           <button
             onClick={() => start(next.id)}
             aria-label={`${next.name}を開始`}
-            className="flex flex-col items-center gap-1 rounded-2xl px-6 py-2 transition active:bg-panel"
+            style={{ '--delay': '0.15s' } as React.CSSProperties}
+            className="rise flex flex-col items-center gap-1 rounded-2xl px-6 py-2 transition active:bg-panel"
           >
             <span className="text-[11px] tracking-[0.2em] text-dim">NEXT</span>
             <span className="flex items-center gap-2 text-lg">
               {next.name}
-              <Icon name="arrow" size={18} className="text-dim" />
+              <Icon name="arrow" size={18} className="nudge text-dim" />
             </span>
             {/* 今日の見どころ: 重量が上がる種目数と、守っている連続更新 */}
             <span className="h-4 text-[11px] leading-4 text-dim">{outlook(next.profile.weightUps, next.streak)}</span>
@@ -155,24 +167,34 @@ export default function Home() {
         )}
       </div>
 
-      {body && <BodyStrip list={body.list} height={body.height} onOpen={() => nav('/body')} onMeasure={() => nav('/body/measure')} onHeight={() => nav('/settings')} />}
+      {body && (
+        <div className="rise relative" style={{ '--delay': '0.3s' } as React.CSSProperties}>
+          <BodyStrip list={body.list} height={body.height} onOpen={() => nav('/body')} onMeasure={() => nav('/body/measure')} onHeight={() => nav('/settings')} />
+        </div>
+      )}
 
       {chain && chain.length > 0 && (
         <button
           onClick={() => nav('/history')}
           aria-label={`直近 ${chain.length} 回のうち、全種目で前回を超えた回 ${chain.filter((c) => allImproved(c.p)).length}`}
-          className="mx-auto flex h-10 shrink-0 items-center gap-2.5 px-4"
+          style={{ '--delay': '0.4s' } as React.CSSProperties}
+          className="rise relative mx-auto flex h-10 shrink-0 items-center gap-2.5 px-4"
         >
-          {chain.map(({ s, p }) => (
+          {chain.map(({ s, p }, i) => (
             <span
               key={s.id}
-              className={`block h-2 w-2 rounded-full ${allImproved(p) ? 'bg-fg' : p.improved > 0 ? 'border border-dim' : 'border border-faint'}`}
+              className={`block h-2 w-2 rounded-full ${allImproved(p) ? 'bg-fg' : p.improved > 0 ? 'border border-dim' : 'border border-faint'} ${
+                i === chain.length - 1 ? 'pulse-ring text-fg' : ''
+              }`}
             />
           ))}
         </button>
       )}
 
-      <nav className="no-scrollbar flex shrink-0 snap-x gap-2 overflow-x-auto px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+2rem)]">
+      <nav
+        style={{ '--delay': '0.5s' } as React.CSSProperties}
+        className="no-scrollbar rise relative flex shrink-0 snap-x gap-2 overflow-x-auto px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+2rem)]"
+      >
         {routines?.map((r) => (
           <button
             key={r.id}

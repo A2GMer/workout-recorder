@@ -144,6 +144,85 @@ input[type='range'].gauge::-moz-range-thumb {
   }
 }
 
+/* ホームの動き: 順送りに浮かび上がる / 足元の輪の呼吸 / 矢印のうながし / 最新ドットの脈動 */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: var(--delay, 0s);
+}
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scaleX(1.08);
+    opacity: 0.6;
+  }
+}
+.breathe {
+  animation: breathe 4.5s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes nudge {
+  0%,
+  70%,
+  100% {
+    transform: translateX(0);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+  90% {
+    transform: translateX(0);
+  }
+}
+.nudge {
+  animation: nudge 3.2s ease-in-out infinite;
+}
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+.pulse-ring {
+  position: relative;
+}
+.pulse-ring::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid currentColor;
+  animation: pulse-ring 2.6s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .breathe,
+  .nudge,
+  .pulse-ring::after {
+    animation: none;
+  }
+  .pulse-ring::after {
+    display: none;
+  }
+}
+
 /* ホームの数字帯。中身を2つ並べ、1つ分（50% + すき間の半分）だけ流してループする */
 @keyframes marquee {
   to {
