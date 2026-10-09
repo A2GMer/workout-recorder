@@ -56,11 +56,11 @@ export default function Body() {
                 {summary.top ? (
                   <span className="mt-3 flex items-baseline gap-2">
                     <span className="text-base text-dim">{measureLabel(summary.top.key)}</span>
-                    <span className="text-[44px] leading-none tracking-tight">+{num(summary.top.delta)}</span>
-                    <span className="text-xs text-dim">cm</span>
+                    <span className="text-[56px] leading-none tracking-tight">+{num(summary.top.delta)}</span>
+                    <span className="text-[11px] text-dim">cm</span>
                   </span>
                 ) : (
-                  <span className="mt-3 text-[44px] leading-none tracking-tight text-dim">—</span>
+                  <span className="mt-3 text-[56px] leading-none tracking-tight text-dim">—</span>
                 )}
                 <span className="mt-3 text-xs text-dim">
                   大きくなった {summary.grown}/{summary.total} 項目
@@ -77,14 +77,14 @@ export default function Body() {
             )}
             <div className="flex h-10 items-end border-b border-line pb-2 text-[11px] tracking-[0.15em] text-dim">
               <span className="flex-1" />
-              <span className="w-16 text-right">NOW</span>
+              <span className="w-16 text-right">今</span>
               <span className="w-16 text-right">{prev ? md(prev.date) : ''}</span>
               <span className="w-16 text-right">{list.length > 2 ? md(first.date) : ''}</span>
             </div>
             {MEASURE_ITEMS.map((item) =>
               item.keys.map((k, i) => {
                 const isOpen = open === k
-                // 今が過去いちばんなら NOW を白く、そうでなければ少し落とす（体重は判定せず白）
+                // 今が過去いちばんなら 「今」を白く、そうでなければ少し落とす（体重は判定せず白）
                 const best = isAtBest(list, k)
                 const nowTone = best === false ? 'text-dim' : 'text-fg'
                 return (
@@ -153,8 +153,8 @@ function Trend({ list, k, unit, target }: { list: Measurement[]; k: MeasureKey; 
                 {num(p.value)}
                 <span className="ml-0.5 text-[10px] text-faint">{unit}</span>
               </span>
-              <span className="mt-1.5 text-[10px] leading-none text-faint">{md(p.date)}</span>
-              <span className="mt-1 h-3 text-[10px] leading-none">{d !== null && <Delta value={d} />}</span>
+              <span className="mt-1.5 text-[11px] leading-none text-faint">{md(p.date)}</span>
+              <span className="mt-1 h-3 text-[11px] leading-none">{d !== null && <Delta value={d} />}</span>
             </div>
           )
         })}
@@ -226,7 +226,7 @@ export function Measure() {
           <div key={item.label} className="flex h-16 items-center border-b border-line">
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-sm text-dim">{item.label}</span>
-              {target && <span className="text-[10px] leading-4 text-faint">目標 {num(target.target)}</span>}
+              {target && <span className="text-[11px] leading-4 text-faint">目標 {num(target.target)}</span>}
             </span>
             {item.keys.map((k, i) => {
               const v = value(k)
@@ -242,7 +242,7 @@ export function Measure() {
                   }`}
                 >
                   <span className={`text-xl leading-none ${changed ? 'text-fg' : v === null ? 'text-faint' : 'text-dim'}`}>
-                    {item.keys.length > 1 && <span className="mr-1 text-[10px] text-faint">{SIDE[i]}</span>}
+                    {item.keys.length > 1 && <span className="mr-1 text-[11px] text-faint">{SIDE[i]}</span>}
                     {v === null ? '—' : num(v)}
                   </span>
                   <span className="mt-1 h-3 text-[10px] leading-none">

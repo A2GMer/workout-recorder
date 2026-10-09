@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
  * ホームの背景。黒地に白の粒子がゆっくり昇り、中央からさざ波の輪が広がって消える。
  * すべて白の濃淡だけ。減速モーション設定では粒子を止め、輪は出さない。
  */
-const PARTICLES = 70
+const PARTICLES = 35
 const RIPPLE_PERIOD = 7000 // ms
 const RIPPLES = 3
 
@@ -39,7 +39,7 @@ export function Backdrop({ className }: { className?: string }) {
       r: 0.6 + Math.random() * 1.2,
       speed: 0.006 + Math.random() * 0.014, // 画面高さ / 秒
       phase: Math.random() * Math.PI * 2,
-      alpha: 0.08 + Math.random() * 0.22,
+      alpha: 0.06 + Math.random() * 0.12,
     }))
 
     let raf = 0
@@ -72,16 +72,17 @@ export function Backdrop({ className }: { className?: string }) {
         ctx.fill()
       }
 
-      // さざ波: 全身図のあたり（上から 42%）を中心に、広がりながら消える輪
+      // さざ波: 全身図のあたり（上から 42%）を中心に、全身図の外側（r0）から広がりながら消える輪
       if (!still) {
         const cx = W / 2
         const cy = H * 0.42
+        const r0 = Math.min(W, H) * 0.28
         const maxR = Math.max(W, H) * 0.7
         ctx.lineWidth = dpr
         for (let i = 0; i < RIPPLES; i++) {
           const f = ((now / RIPPLE_PERIOD + i / RIPPLES) % 1 + 1) % 1
-          const r = f * maxR
-          const a = (1 - f) * (1 - f) * 0.14
+          const r = r0 + f * (maxR - r0)
+          const a = (1 - f) * (1 - f) * 0.1
           ctx.beginPath()
           ctx.arc(cx, cy, r, 0, Math.PI * 2)
           ctx.strokeStyle = `rgba(255,255,255,${a.toFixed(3)})`

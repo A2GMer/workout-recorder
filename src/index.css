@@ -7,7 +7,7 @@
   --color-panel: #0f0f0f;
   --color-chip: #1a1a1a;
   --color-line: #262626;
-  --color-faint: #4a4a4a;
+  --color-faint: #5a5a5a;
   --color-dim: #8a8a8a;
   --color-fg: #fff;
   --font-sans: 'Figtree Variable', 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif;
@@ -259,4 +259,25 @@ input[type='range'].gauge::-moz-range-thumb {
 
 select option {
   background: #111;
+}
+
+/* 記録した ✓ から広がる波紋 */
+@keyframes ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+.ripple {
+  animation: ripple 0.5s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ripple {
+    animation: none;
+    opacity: 0;
+  }
 }

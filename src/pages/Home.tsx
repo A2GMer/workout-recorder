@@ -256,7 +256,7 @@ function BodyStrip({ list, height, onOpen, onMeasure, onHeight }: {
   // 日付や「あと」は動かさず、その右だけがゆっくり右から左へ流れてループする
   const Row = ({ children, onClick, label }: { children: React.ReactNode; onClick: () => void; label: string }) => (
     <button onClick={onClick} className="flex h-9 w-full items-center gap-4 pl-5 text-left whitespace-nowrap">
-      <span className="w-8 shrink-0 text-[10px] tracking-[0.15em] text-faint">{label}</span>
+      <span className="w-10 shrink-0 text-[11px] tracking-[0.15em] text-faint">{label}</span>
       <Marquee>{children}</Marquee>
     </button>
   )
@@ -277,9 +277,9 @@ function BodyStrip({ list, height, onOpen, onMeasure, onHeight }: {
           {changes.map((c) => (
             <span key={c.label} className="flex shrink-0 items-baseline gap-1">
               <span className="text-[11px] text-dim">{c.label}</span>
-              <span className={`text-sm ${c.delta > 0 ? 'text-fg' : 'text-dim'}`}>
+              <span className={`text-base ${c.delta > 0 ? 'text-fg' : 'text-dim'}`}>
                 {c.delta > 0 ? `+${num(c.delta)}` : `−${num(-c.delta)}`}
-                {c.unit === 'kg' && <span className="ml-0.5 text-[10px] text-faint">kg</span>}
+                {c.unit && <span className="ml-0.5 text-[10px] text-faint">{c.unit}</span>}
               </span>
             </span>
           ))}
@@ -300,7 +300,7 @@ function BodyStrip({ list, height, onOpen, onMeasure, onHeight }: {
             {next.map((p) => (
               <span key={p.label} className="flex shrink-0 items-baseline gap-1">
                 <span className="text-[11px] text-dim">{p.label}</span>
-                <span className="text-sm text-fg">
+                <span className="text-base text-fg">
                   {num(p.gap)}
                   <span className="ml-0.5 text-[10px] text-faint">cm</span>
                 </span>

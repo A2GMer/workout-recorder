@@ -110,7 +110,7 @@ export default function Login() {
         <input
           type="email"
           autoComplete={signup ? 'email' : 'username'}
-          placeholder="email"
+          placeholder="メールアドレス"
           value={email}
           onChange={change(setEmail)}
           className={field}
@@ -118,7 +118,7 @@ export default function Login() {
         <input
           type="password"
           autoComplete={signup ? 'new-password' : 'current-password'}
-          placeholder="password"
+          placeholder="パスワード"
           value={password}
           onChange={change(setPassword)}
           className={field}
@@ -127,7 +127,7 @@ export default function Login() {
           <input
             type="password"
             autoComplete="new-password"
-            placeholder="password（確認）"
+            placeholder="パスワード（確認）"
             value={confirm}
             onChange={change(setConfirm)}
             className={field}

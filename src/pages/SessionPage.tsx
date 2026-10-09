@@ -78,7 +78,7 @@ export default function SessionPage() {
   function editBodyWeight() {
     setEditor({
       key: 'bw',
-      label: 'BODY',
+      label: '体重',
       unit: 'kg',
       value: Math.round(session.body_weight_kg),
       step: 1,

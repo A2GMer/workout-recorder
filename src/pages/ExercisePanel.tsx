@@ -16,6 +16,8 @@ import type { Exercise, Session, SessionExercise, Settings, SetKind, WorkSet } f
 import type { Editor } from '../ui/Stepper'
 import { Icon } from '../ui/Icon'
 import { FatigueGauge } from '../ui/FatigueGauge'
+import { Toast } from '../ui/Toast'
+import { useDragAdjust } from '../ui/useDragAdjust'
 
 type Field = 'weight' | 'reps' | 'cheat'
 interface Draft {
@@ -71,6 +73,66 @@ const FIELD_COL: Record<Field, keyof WorkSet> = {
   cheat: 'cheat_reps',
 }
 
+/** 数字のボタン。タップで Stepper、長押しのあとドラッグで連続調整 */
+function NumberCell({
+  value,
+  onApply,
+  onTap,
+  onDragStart,
+  axis,
+  pixelsPerStep,
+  step,
+  min,
+  className,
+  ariaLabel,
+  children,
+}: {
+  value: number
+  onApply: (v: number) => void
+  onTap: (el: HTMLElement) => void
+  onDragStart: () => void
+  axis: 'x' | 'y'
+  pixelsPerStep: number
+  step: number
+  min?: number
+  className: string
+  ariaLabel?: string
+  children: React.ReactNode
+}) {
+  const [dragging, setDragging] = useState(false)
+  const start = useRef(value)
+  const handlers = useDragAdjust({
+    axis,
+    pixelsPerStep,
+    onStart: () => {
+      start.current = value
+      setDragging(true)
+      onDragStart()
+    },
+    onSteps: (steps) => {
+      const v = fix(start.current + steps * step)
+      onApply(min === undefined ? v : Math.max(min, v))
+    },
+    onEnd: () => setDragging(false),
+    onTap,
+  })
+  return (
+    <button
+      {...handlers}
+      // キーボード操作（detail 0）だけここで拾う。ポインタ操作は上のハンドラが扱う
+      onClick={(e) => {
+        if (e.detail === 0) onTap(e.currentTarget)
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+      aria-label={ariaLabel}
+      style={{ touchAction: axis === 'x' ? 'pan-y' : 'pan-x' }}
+      className={`select-none ${className} ${dragging ? 'bg-chip' : ''}`}
+    >
+      {children}
+    </button>
+  )
+}
+
 export function ExercisePanel({
   data,
   session,
@@ -91,6 +153,13 @@ export function ExercisePanel({
   const { se, ex, sets, prev } = data
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [extra, setExtra] = useState(0)
+  // 記録した瞬間の波紋（行キー → 発火時刻。span の key にして毎回つくり直す）
+  const [ripples, setRipples] = useState<Record<string, number>>({})
+  // 取り消した記録（「戻す」で復活できる）
+  const [undo, setUndo] = useState<WorkSet | null>(null)
+  const gaugeRef = useRef<HTMLDivElement>(null)
+  const gaugeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(gaugeTimer.current), [])
   const bw = session.body_weight_kg
   const ctx = { bodyWeight: bw, ezBarKg: settings.ez_bar_kg, smithBarKg: settings.smith_bar_kg }
   const sugg = suggest(ex, prev?.prev ?? null)
@@ -177,24 +246,39 @@ export function ExercisePanel({
     setDrafts((ds) => ({ ...ds, [key]: { ...ds[key], [field]: v } }))
   }
 
+  /** 数値の反映（Stepper もドラッグも共通）。記録済みなら保存、未記録なら下書き */
+  function applyValue(row: Row, field: Field, v: number) {
+    if (row.rec) void patch<WorkSet>('work_sets', row.rec.id, { [FIELD_COL[field]]: v })
+    else setDraft(row.key, field, v)
+  }
+
   function edit(row: Row, field: Field, el: HTMLElement) {
     el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
     const value = field === 'weight' ? row.weight : field === 'reps' ? row.reps : row.cheat
     const isW = field === 'weight'
     openEditor({
       key: `${se.id}:${row.key}:${field}`,
-      label: row.kind === 'backoff' ? 'BACK-OFF' : `SET ${row.setNo}`,
+      label: row.kind === 'backoff' ? 'BACK-OFF' : `セット ${row.setNo}`,
       unit: isW ? 'kg' : field === 'reps' ? '回' : 'チート',
       value,
       step: isW ? ex.weight_step : 1,
       big: isW ? 10 : undefined,
       min: isW ? (ex.equipment === 'bodyweight' ? undefined : bar) : 0,
       format: isW ? (v) => fmtWeight(ex.equipment, v) : String,
-      apply: (v) => {
-        if (row.rec) void patch<WorkSet>('work_sets', row.rec.id, { [FIELD_COL[field]]: v })
-        else setDraft(row.key, field, v)
-      },
+      apply: (v) => applyValue(row, field, v),
     })
+  }
+
+  function ripple(key: string) {
+    const stamp = Date.now()
+    setRipples((r) => ({ ...r, [key]: stamp }))
+    setTimeout(() => {
+      setRipples((r) => {
+        if (r[key] !== stamp) return r
+        const { [key]: _, ...rest } = r
+        return rest
+      })
+    }, 500)
   }
 
   async function toggle(row: Row) {
@@ -202,10 +286,19 @@ export function ExercisePanel({
     if (row.rec) {
       // 取り消し時は値を下書きに戻す
       setDrafts((ds) => ({ ...ds, [row.key]: { weight: row.weight, reps: row.reps, cheat: row.cheat } }))
-      await remove('work_sets', row.rec.id)
+      const removed = row.rec
+      await remove('work_sets', removed.id)
+      setUndo(removed)
       return
     }
+    setUndo(null)
     // バックオフの重量はその時点で確定させる
+    ripple(row.key)
+    try {
+      navigator.vibrate?.(10)
+    } catch {
+      // 対応していない端末は無視
+    }
     await save<WorkSet>('work_sets', {
       id: uuid(),
       session_exercise_id: se.id,
@@ -217,6 +310,27 @@ export function ExercisePanel({
     })
     setDrafts((ds) => {
       const { [row.key]: _, ...rest } = ds
+      return rest
+    })
+    // メインセットが全部そろった / バックオフを記録したら、疲労ゲージへ
+    const done = row.kind === 'backoff' || rows.filter((r) => r.kind === 'main').every((r) => r.rec || r.key === row.key)
+    if (done) {
+      clearTimeout(gaugeTimer.current)
+      gaugeTimer.current = setTimeout(() => {
+        const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        gaugeRef.current?.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'center' })
+      }, 300)
+    }
+  }
+
+  async function restore() {
+    if (!undo) return
+    const rec = undo
+    setUndo(null)
+    await save<WorkSet>('work_sets', { ...rec, deleted: false })
+    // 取り消し時に戻しておいた下書きは不要
+    setDrafts((ds) => {
+      const { [rec.kind === 'backoff' ? 'b1' : `m${rec.set_no}`]: _, ...rest } = ds
       return rest
     })
   }
@@ -263,45 +377,75 @@ export function ExercisePanel({
           const tone = recorded ? 'text-fg' : 'text-faint'
           const perSide = bar > 0 ? (row.weight - bar) / 2 : null
           const backoff = row.kind === 'backoff'
+          // 次に押す ✓ だけが白。ほかの未記録は灰のまま
+          const isNext = !recorded && nextRow?.key === row.key
           return (
             <div
               key={row.key}
               className={`flex h-16 items-center border-b border-line `}
             >
               <span className="w-7 shrink-0 text-xs text-faint">{backoff ? 'B' : row.setNo}</span>
-              <button
-                onClick={(e) => edit(row, 'weight', e.currentTarget)}
+              <NumberCell
+                value={row.weight}
+                onApply={(v) => applyValue(row, 'weight', v)}
+                onTap={(el) => edit(row, 'weight', el)}
+                onDragStart={closeEditor}
+                axis="x"
+                pixelsPerStep={24}
+                step={ex.weight_step}
+                min={ex.equipment === 'bodyweight' ? undefined : bar}
                 className={`flex h-12 w-[92px] shrink-0 flex-col items-end justify-center rounded-xl px-2 transition ${tone} ${cell(row, 'weight')}`}
               >
                 <span className="text-[26px] leading-none">{fmtWeight(ex.equipment, row.weight)}</span>
                 {perSide !== null && perSide > 0 && (
-                  <span className="mt-1 text-[10px] leading-none text-faint">片 {num(perSide)}</span>
+                  <span className="mt-1 text-[11px] leading-none text-faint">片 {num(perSide)}</span>
                 )}
-              </button>
+              </NumberCell>
               <span className="w-6 shrink-0 text-center text-xs text-faint">×</span>
-              <button
-                onClick={(e) => edit(row, 'reps', e.currentTarget)}
+              <NumberCell
+                value={row.reps}
+                onApply={(v) => applyValue(row, 'reps', v)}
+                onTap={(el) => edit(row, 'reps', el)}
+                onDragStart={closeEditor}
+                axis="y"
+                pixelsPerStep={20}
+                step={1}
+                min={0}
                 className={`flex h-12 min-w-12 shrink-0 items-center rounded-xl px-2 transition ${tone} ${cell(row, 'reps')}`}
               >
                 <span className="text-[26px] leading-none">{row.reps}</span>
                 {!recorded && row.need ? <span className="ml-1.5 text-xs text-dim">≥{row.need}</span> : null}
-              </button>
-              <button
-                onClick={(e) => edit(row, 'cheat', e.currentTarget)}
-                aria-label="チーティング回数"
+              </NumberCell>
+              <NumberCell
+                value={row.cheat}
+                onApply={(v) => applyValue(row, 'cheat', v)}
+                onTap={(el) => edit(row, 'cheat', el)}
+                onDragStart={closeEditor}
+                axis="y"
+                pixelsPerStep={20}
+                step={1}
+                min={0}
+                ariaLabel="チーティング回数"
                 className={`ml-auto flex h-11 min-w-11 shrink-0 items-center justify-center rounded-xl px-2 text-xs transition ${
                   row.cheat > 0 ? 'text-fg' : 'text-faint'
                 } ${cell(row, 'cheat')}`}
               >
                 C{row.cheat}
-              </button>
+              </NumberCell>
               <button
                 onClick={() => toggle(row)}
                 aria-label={recorded ? '記録取消' : '記録'}
-                className={`ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition active:scale-90 ${
-                  recorded ? 'bg-fg text-bg' : 'border border-faint text-faint'
+                className={`relative ml-2 flex h-11 w-11 shrink-0 items-center justify-center overflow-visible rounded-full transition active:scale-90 ${
+                  recorded ? 'bg-fg text-bg' : isNext ? 'border border-fg text-fg' : 'border border-faint text-faint'
                 }`}
               >
+                {ripples[row.key] !== undefined && (
+                  <span
+                    key={ripples[row.key]}
+                    aria-hidden
+                    className="ripple pointer-events-none absolute inset-0 rounded-full border border-fg"
+                  />
+                )}
                 <Icon name="check" size={20} />
               </button>
             </div>
@@ -311,7 +455,8 @@ export function ExercisePanel({
   return (
     <section className="no-scrollbar flex h-full w-full shrink-0 grow-0 basis-full flex-col overflow-y-auto px-5 pb-64 [&>*]:shrink-0">
       {/* ボリューム */}
-      <div className="flex flex-col items-center pt-4">
+      {/* 3D の線に数字が埋もれないよう、背面に黒をにじませる（位置は動かさない） */}
+      <div className="-mx-5 -mb-6 flex flex-col items-center bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.85)_35%,rgba(0,0,0,0)_72%)] px-5 pb-6 pt-4">
         <span className={`text-[56px] leading-none tracking-tight ${pulse ? 'animate-beat' : ''}`}>{fmtVolume(actual)}</span>
         {/* 前回比: 超えたら白で +N、まだなら「あと N」（前回 +1 まで） */}
         <span className={`mt-2 h-4 text-xs leading-4 ${beat ? 'text-fg' : 'text-dim'}`}>
@@ -331,14 +476,20 @@ export function ExercisePanel({
           </div>
         )}
         <p className="mt-4 text-center text-xs leading-5 text-dim">
-          {prev
-            ? `${md(prev.session.date)}　${fmtSets(ex.equipment, [...prev.prev.main, ...prev.prev.backoff])} = ${fmtVolume(sugg.prevVolume!)}`
-            : '初回'}
+          {prev ? (
+            <>
+              <span className="text-faint">{md(prev.session.date)}</span>
+              <span className="text-dim">　{fmtSets(ex.equipment, [...prev.prev.main, ...prev.prev.backoff])}</span>
+              <span className="text-fg"> = {fmtVolume(sugg.prevVolume!)}</span>
+            </>
+          ) : (
+            '初回'
+          )}
         </p>
       </div>
 
       {/* セット */}
-      <div className="mt-8 flex flex-col">
+      <div className="-mx-5 mt-8 flex flex-col bg-[linear-gradient(to_bottom,rgba(0,0,0,0)_0%,rgba(0,0,0,0.75)_8%,rgba(0,0,0,0.75)_92%,rgba(0,0,0,0)_100%)] px-5">
         {rows.filter((r) => r.kind === 'main').map(renderRow)}
         <button
           onClick={() => setExtra((n) => n + 1)}
@@ -358,7 +509,7 @@ export function ExercisePanel({
       </div>
 
       {/* 疲労度 */}
-      <div className="mt-8 flex items-center gap-4">
+      <div ref={gaugeRef} className="mt-8 flex items-center gap-4">
         <span className="text-xs text-dim">軽</span>
         <FatigueGauge
           value={fatigue}
@@ -430,6 +581,16 @@ export function ExercisePanel({
             <Icon name="back" size={18} className="rotate-180" />
           </button>
         </div>
+      )}
+
+      {undo && (
+        <Toast
+          key={undo.id}
+          message="取り消しました"
+          action="戻す"
+          onAction={() => void restore()}
+          onClose={() => setUndo(null)}
+        />
       )}
     </section>
   )

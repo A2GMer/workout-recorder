@@ -112,6 +112,8 @@ export function Figure3D({
   const dragging = useRef(false)
   const lastX = useRef(0)
   const downAt = useRef({ x: 0, t: 0 })
+  // 触ってから 20 秒は自転しない（惰性は別）
+  const idleUntil = useRef<number>(0)
   const cycle = useRef<() => void>(() => {})
   // タップで選んだモーション。データ更新で描き直しても戻らないように持つ
   const chosen = useRef<Motion | null>(null)
@@ -314,7 +316,7 @@ export function Figure3D({
         if (Math.abs(velocity.current) > 0.0005) {
           yaw.current += velocity.current
           velocity.current *= 0.94
-        } else if (!still) {
+        } else if (!still && performance.now() > idleUntil.current) {
           yaw.current += 0.0035
         }
       }
@@ -341,6 +343,7 @@ export function Figure3D({
     dragging.current = true
     lastX.current = e.clientX
     downAt.current = { x: e.clientX, t: performance.now() }
+    idleUntil.current = performance.now() + 20000
     velocity.current = 0
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
   }
@@ -349,12 +352,14 @@ export function Figure3D({
     const w = box.current?.clientWidth || 300
     const d = ((e.clientX - lastX.current) / w) * Math.PI * 1.2
     lastX.current = e.clientX
+    idleUntil.current = performance.now() + 20000
     yaw.current += d
     velocity.current = d
   }
   function up(e: React.PointerEvent) {
     if (!dragging.current) return
     dragging.current = false
+    idleUntil.current = performance.now() + 20000
     const moved = Math.abs(e.clientX - downAt.current.x)
     if (moved < 8 && performance.now() - downAt.current.t < 400) cycle.current()
   }

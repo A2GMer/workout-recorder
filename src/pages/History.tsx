@@ -112,7 +112,7 @@ export default function History() {
         {done.length > 0 && (
           <div className="flex flex-col items-center pt-4 pb-8">
             <span className="text-[11px] tracking-[0.2em] text-dim">TOTAL</span>
-            <span className="mt-3 text-[44px] leading-none tracking-tight">{fmtVolume(lifetime)}</span>
+            <span className="mt-3 text-[56px] leading-none tracking-tight">{fmtVolume(lifetime)}</span>
             <span className="mt-2 text-xs text-dim">
               {done.length}回{comparedAll ? ` · 更新 ${improvedAll}/${comparedAll} 種目` : ''}
             </span>
@@ -137,7 +137,7 @@ export default function History() {
             <Icon name="back" size={18} className="rotate-180" />
           </button>
         </div>
-        <div className="grid grid-cols-7 text-center text-[10px] tracking-[0.15em] text-faint">
+        <div className="grid grid-cols-7 text-center text-[11px] tracking-[0.15em] text-faint">
           {WEEKDAYS.map((w) => (
             <span key={w} className="h-6 leading-6">
               {w}

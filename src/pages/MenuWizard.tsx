@@ -280,7 +280,7 @@ function ExerciseList({ parts, candidates, selected, summaries, isSelected, onTo
                       {fmtWeight(c.equipment, s.topWeight)}
                       <span className="ml-0.5 text-[10px] text-faint">kg</span>
                     </span>
-                    <span className="mt-1 text-[10px] leading-none text-faint">
+                    <span className="mt-1 text-[11px] leading-none text-faint">
                       {s.gain && s.gain > 0 ? `+${num(s.gain)}` : ''}
                       {s.gain && s.gain > 0 && s.weightUp ? ' · ' : ''}
                       {s.weightUp ? '次は重量アップ' : ''}
