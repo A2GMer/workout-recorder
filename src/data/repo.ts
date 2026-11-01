@@ -5,14 +5,13 @@ import type {
   Equipment,
   Exercise,
   Measurement,
-  Routine,
-  RoutineItem,
   Session,
   SessionExercise,
   Settings,
   Synced,
   WorkSet,
 } from '../lib/types'
+import { BODY_PARTS } from '../lib/types'
 import { challenge, fix, streak, suggest, volume, type PrevPerformance } from '../lib/progression'
 import { idealTargets, proposals } from '../lib/ideal'
 import { exerciseDefaults, PRESETS } from '../lib/presets'
@@ -75,16 +74,6 @@ export async function listExercises(includeArchived = false): Promise<Exercise[]
   return all
     .filter((e) => includeArchived || !e.archived)
     .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
-}
-
-export async function listRoutines(): Promise<Routine[]> {
-  return (await db.routines.toArray()).filter(alive).sort((a, b) => a.sort_order - b.sort_order)
-}
-
-export async function routineItems(routineId: string): Promise<RoutineItem[]> {
-  return (await db.routine_items.where('routine_id').equals(routineId).toArray())
-    .filter(alive)
-    .sort((a, b) => a.sort_order - b.sort_order)
 }
 
 export async function listSessions(): Promise<Session[]> {
@@ -178,37 +167,69 @@ export async function exerciseHistory(ex: Exercise, current: Session, limit = 60
   return out
 }
 
-// ---- セッション開始 ----
+// ---- 今日の種目 ----
 
-/** 今日の同じメニューがあれば再開、なければ作成 */
-export async function startSession(routineId: string): Promise<string> {
-  const today = localDate()
-  const existing = (await db.sessions.where('date').equals(today).toArray()).find(
-    (s) => alive(s) && s.routine_id === routineId,
-  )
-  if (existing) return existing.id
+/** 今日のセッション（同じ日に複数あれば一番新しいもの） */
+export async function todaySession(): Promise<Session | undefined> {
+  return (await listSessions()).find((s) => s.date === localDate())
+}
 
-  const settings = await getSettings()
-  const session: Session = {
-    id: uuid(),
-    routine_id: routineId,
-    date: today,
-    body_weight_kg: settings.body_weight_kg,
-    created_at: new Date().toISOString(),
+/**
+ * 今日の種目を決める。sessionId（組み直すセッション）がなければ今日のセッションを作り、
+ * あれば並び順どおりに置き換える。残る種目の記録はそのまま、外した種目は記録ごと外す。未作成の種目はここで作る
+ */
+export async function planToday(candidates: Candidate[], sessionId?: string): Promise<string> {
+  const exerciseIds = await ensureExercises(candidates)
+  let session = sessionId ? await db.sessions.get(sessionId) : undefined
+  if (!alive(session)) {
+    session = {
+      id: uuid(),
+      routine_id: null,
+      date: localDate(),
+      body_weight_kg: (await getSettings()).body_weight_kg,
+      created_at: new Date().toISOString(),
+    }
+    await save('sessions', session)
   }
-  const active = new Set((await listExercises()).map((e) => e.id))
-  const items = (await routineItems(routineId)).filter((it) => active.has(it.exercise_id))
-  const ses: SessionExercise[] = items.map((it, i) => ({
-    id: uuid(),
-    session_id: session.id,
-    exercise_id: it.exercise_id,
-    sort_order: i,
-    fatigue: 50,
-    comment: '',
-  }))
-  await save('sessions', session)
-  if (ses.length) await save('session_exercises', ses)
-  return session.id
+  const id = session.id
+  const current = await sessionExercises(id)
+  const next: SessionExercise[] = exerciseIds.map((exerciseId, i) => {
+    const old = current.find((se) => se.exercise_id === exerciseId)
+    return { ...(old ?? { id: uuid(), session_id: id, exercise_id: exerciseId, fatigue: 50, comment: '' }), sort_order: i }
+  })
+  const dropped = current.filter((se) => !exerciseIds.includes(se.exercise_id))
+  const droppedSets = (await Promise.all(dropped.map((se) => setsOf(se.id)))).flat()
+  await save('session_exercises', [...next, ...dropped.map((se) => ({ ...se, deleted: true }))])
+  if (droppedSets.length) await save('work_sets', droppedSets.map((w) => ({ ...w, deleted: true })))
+  return id
+}
+
+/** 部位ごとの前回: 最後に鍛えた日と、その回にやったその部位の種目（並び順。アーカイブした種目は除く） */
+export interface PartRecent {
+  date: string
+  exercises: Exercise[]
+}
+
+/** 部位ごとに、記録のある種目があった一番新しい回を探す */
+export async function recentByPart(): Promise<Map<BodyPart, PartRecent>> {
+  const byId = new Map((await listExercises(true)).map((e) => [e.id, e]))
+  const recorded = new Set((await db.work_sets.toArray()).filter(alive).map((w) => w.session_exercise_id))
+  const bySession = new Map<string, SessionExercise[]>()
+  for (const se of (await db.session_exercises.toArray()).filter(alive)) {
+    if (recorded.has(se.id)) bySession.set(se.session_id, [...(bySession.get(se.session_id) ?? []), se])
+  }
+  const out = new Map<BodyPart, PartRecent>()
+  for (const s of await listSessions()) {
+    if (out.size === BODY_PARTS.length) break
+    const found = new Map<BodyPart, Exercise[]>()
+    for (const se of (bySession.get(s.id) ?? []).sort((a, b) => a.sort_order - b.sort_order)) {
+      const ex = byId.get(se.exercise_id)
+      if (!ex?.body_part || out.has(ex.body_part)) continue
+      found.set(ex.body_part, [...(found.get(ex.body_part) ?? []), ex])
+    }
+    for (const [part, exercises] of found) out.set(part, { date: s.date, exercises: exercises.filter((e) => !e.archived) })
+  }
+  return out
 }
 
 // ---- 身体計測 ----
@@ -226,9 +247,9 @@ export async function saveMeasurement(values: Partial<Measurement>, date = local
   if (row.weight_kg) await save<Settings>('settings', { ...(await getSettings()), body_weight_kg: row.weight_kg })
 }
 
-// ---- メニュー作成 ----
+// ---- 種目の候補 ----
 
-/** メニュー作成で選べる種目。作成済みの種目 + まだ作っていない事前登録 */
+/** 今日を組むときに選べる種目。作成済みの種目 + まだ作っていない事前登録 */
 export interface Candidate {
   key: string
   name: string
@@ -239,18 +260,20 @@ export interface Candidate {
   exercise?: Exercise
 }
 
+export const candidateOf = (e: Exercise): Candidate => ({
+  key: e.id,
+  name: e.name,
+  part: e.body_part ?? null,
+  equipment: e.equipment,
+  heavy: e.pyramid,
+  exercise: e,
+})
+
 export async function listCandidates(): Promise<Candidate[]> {
   const mine = await listExercises()
   const names = new Set(mine.map((e) => e.name))
   return [
-    ...mine.map((e) => ({
-      key: e.id,
-      name: e.name,
-      part: e.body_part ?? null,
-      equipment: e.equipment,
-      heavy: e.pyramid,
-      exercise: e,
-    })),
+    ...mine.map(candidateOf),
     ...PRESETS.filter((p) => !names.has(p.name)).map((p) => ({
       key: `preset:${p.name}`,
       name: p.name,
@@ -261,17 +284,12 @@ export async function listCandidates(): Promise<Candidate[]> {
   ]
 }
 
-/** メニューを保存（新規/更新）。未作成の種目はここで作る */
-export async function saveRoutine(input: {
-  id?: string
-  name: string
-  body_parts: BodyPart[]
-  candidates: Candidate[]
-}): Promise<string> {
+/** 未作成の種目（事前登録・新規）を作り、並び順どおりの種目 ID を返す */
+async function ensureExercises(candidates: Candidate[]): Promise<string[]> {
   const exercises = await listExercises(true)
   let order = exercises.length
   const exerciseIds: string[] = []
-  for (const c of input.candidates) {
+  for (const c of candidates) {
     if (c.exercise) {
       exerciseIds.push(c.exercise.id)
       continue
@@ -288,36 +306,7 @@ export async function saveRoutine(input: {
     await save('exercises', e)
     exerciseIds.push(e.id)
   }
-
-  const routines = await listRoutines()
-  const existing = input.id ? await db.routines.get(input.id) : undefined
-  const routine: Routine = {
-    ...(existing ?? { id: uuid(), sort_order: routines.length }),
-    name: input.name,
-    body_parts: input.body_parts,
-  }
-  await save('routines', routine)
-
-  // 並び順どおりに置き換える（既存の行は使い回し、外れたものは削除）
-  const items = existing ? await routineItems(routine.id) : []
-  const next: RoutineItem[] = exerciseIds.map((exerciseId, i) => {
-    const old = items.find((it) => it.exercise_id === exerciseId)
-    return { ...(old ?? { id: uuid(), routine_id: routine.id, exercise_id: exerciseId }), sort_order: i }
-  })
-  const removed = items.filter((it) => !exerciseIds.includes(it.exercise_id)).map((it) => ({ ...it, deleted: true }))
-  await save('routine_items', [...next, ...removed])
-  return routine.id
-}
-
-export interface RoutineProfile {
-  /** 多い順に最大2部位 */
-  parts: BodyPart[]
-  /** 次回提案の挑戦度 0〜1 */
-  intensity: number
-  /** 今日、重量が上がる種目の数（前回全セット達成） */
-  weightUps: number
-  /** メニューの種目数 */
-  exercises: number
+  return exerciseIds
 }
 
 /** セッションの成績: 前回と比べられた種目数と、そのうち前回を超えた数 */
@@ -371,8 +360,8 @@ export async function trainingSince(date: string): Promise<SessionProgress & { s
 export const allImproved = (p: SessionProgress) => p.compared > 0 && p.improved === p.compared
 
 /** 「今これから行う」想定のセッション。前回や履歴を探す基準に使う */
-function nowSession(routineId: string | null = null): Session {
-  return { id: '', routine_id: routineId, date: localDate(), body_weight_kg: 0, created_at: new Date().toISOString() }
+function nowSession(): Session {
+  return { id: '', routine_id: null, date: localDate(), body_weight_kg: 0, created_at: new Date().toISOString() }
 }
 
 /** 種目の歩み: 今の最大重量と、初回からの伸び（設定の種目一覧で自己ベスト一覧として見せる） */
@@ -416,23 +405,6 @@ export async function lackingParts(top = 3): Promise<BodyPart[]> {
   return out
 }
 
-/** メニューの歩み: 行った回数と連続更新 */
-export async function routineSummary(routineId: string): Promise<{ sessions: number; streak: number }> {
-  const byId = new Map((await listExercises(true)).map((e) => [e.id, e]))
-  let sessions = 0
-  let run = 0
-  let broken = false
-  for (const s of (await listSessions()).filter((s) => s.routine_id === routineId)) {
-    const p = await sessionProgress(s, byId)
-    if (!p.recorded) continue
-    sessions++
-    if (broken || p.compared === 0) continue // 比べられない回（初回など）は連続の数に入れずに飛ばす
-    if (allImproved(p)) run++
-    else broken = true
-  }
-  return { sessions, streak: run }
-}
-
 /** 記録をはじめてからの歩み: 初日・日数・回数・累計ボリューム */
 export async function journey(): Promise<{ firstDate: string; days: number; sessions: number; volume: number } | null> {
   const byId = new Map((await listExercises(true)).map((e) => [e.id, e]))
@@ -450,31 +422,14 @@ export async function journey(): Promise<{ firstDate: string; days: number; sess
   return { firstDate, days, sessions: done.length, volume: fix(total) }
 }
 
-
-/** メニューの模様を決める: 含まれる種目の部位と、次回提案の挑戦度の平均 */
-export async function routineProfile(routineId: string): Promise<RoutineProfile> {
-  const byId = new Map((await listExercises()).map((e) => [e.id, e]))
-  const exercises = (await routineItems(routineId))
-    .map((it) => byId.get(it.exercise_id))
-    .filter((e): e is Exercise => !!e)
-  const freq = new Map<BodyPart, number>()
-  for (const e of exercises) if (e.body_part) freq.set(e.body_part, (freq.get(e.body_part) ?? 0) + 1)
-  // メニューで対象部位を選んでいればそれを優先（種目が多い順）。なければ種目の部位から
-  const chosen = (await db.routines.get(routineId))?.body_parts ?? []
-  const parts = (chosen.length ? chosen.map((p) => [p, freq.get(p) ?? 0] as const) : [...freq.entries()])
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 2)
-    .map(([p]) => p)
-
+/** これからやる種目の見どころ: 次回提案の挑戦度の平均（模様の激しさ）と、重量が上がる種目数（前回全セット達成） */
+export async function planOutlook(exercises: Exercise[]): Promise<{ intensity: number; weightUps: number }> {
   // 「今これから行う」想定のセッションを基準に前回を探す
-  const now = nowSession(routineId)
+  const now = nowSession()
   const prevs = await Promise.all(exercises.map(async (e) => (await previousPerformance(e.id, now))?.prev ?? null))
   const scores = exercises.map((e, i) => challenge(e, prevs[i]))
-  const intensity = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0.3
-  const weightUps = exercises.filter((e, i) => suggest(e, prevs[i]).achieved).length
-  return { parts, intensity, weightUps, exercises: exercises.length }
-}
-
-export async function lastSessionOf(routineId: string): Promise<Session | undefined> {
-  return (await listSessions()).find((s) => s.routine_id === routineId)
+  return {
+    intensity: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0.3,
+    weightUps: exercises.filter((e, i) => suggest(e, prevs[i]).achieved).length,
+  }
 }

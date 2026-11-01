@@ -1,6 +1,6 @@
-import { lazy, Suspense, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { db } from '../data/db'
 import {
   exerciseHistory,
@@ -17,8 +17,9 @@ import {
 } from '../data/repo'
 import { figureOf, idealTargets } from '../lib/ideal'
 import { fmtVolume, md, num } from '../lib/format'
+import { partsOf } from '../lib/plan'
 import { fix, volume } from '../lib/progression'
-import type { Exercise, Session, SessionExercise, Settings } from '../lib/types'
+import { BODY_PART_LABEL, BODY_PARTS, type BodyPart, type Exercise, type Session, type SessionExercise, type Settings } from '../lib/types'
 import { DIMS_OF_PART, MOTION_OF_PART, RANDOM } from '../ui/Figure3D'
 
 // 背景の 3D は別チャンク
@@ -30,6 +31,7 @@ import { ExercisePanel, progressOf, type PanelData } from './ExercisePanel'
 
 export default function SessionPage() {
   const { id } = useParams()
+  const nav = useNavigate()
   const data = useLiveQuery(async () => {
     const session = await db.sessions.get(id!)
     if (!session || session.deleted) return null
@@ -133,6 +135,8 @@ export default function SessionPage() {
 
   const total = panels.length + 1
   const current = panels[page]
+  // 足す・入れ替える種目は部位ごとに。今日の部位を先に
+  const todayParts = partsOf(panels.map((p) => p.ex.body_part))
   // 背景の全身図で強調する部位 = 開いている種目の部位
   const emphasis = new Set(current?.ex.body_part ? DIMS_OF_PART[current.ex.body_part] : [])
   const bgMotion = (current?.ex.body_part && MOTION_OF_PART[current.ex.body_part]) || RANDOM
@@ -197,34 +201,50 @@ export default function SessionPage() {
           {unused.length > 0 && (
             <span className="mt-8 border-b border-line pb-2 text-[11px] tracking-[0.15em] text-dim">ADD</span>
           )}
-          {unused.map((e) => (
-            <button
-              key={e.id}
-              onClick={() => addExercise(e.id)}
-              className="flex h-14 items-center justify-between border-b border-line text-left transition active:text-dim"
-            >
-              <span className="truncate">{e.name}</span>
-              <Icon name="plus" size={18} className="shrink-0 text-faint" />
-            </button>
+          {byPart(unused, todayParts).map((g) => (
+            <Fragment key={g.label}>
+              <span className="mt-4 text-[11px] text-faint">{g.label}</span>
+              {g.items.map((e) => (
+                <button
+                  key={e.id}
+                  onClick={() => addExercise(e.id)}
+                  className="flex h-14 items-center justify-between border-b border-line text-left transition active:text-dim"
+                >
+                  <span className="truncate">{e.name}</span>
+                  <Icon name="plus" size={18} className="shrink-0 text-faint" />
+                </button>
+              ))}
+            </Fragment>
           ))}
         </section>
       </div>
       {!editor && (
-        <div className="flex shrink-0 justify-center pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-          {Array.from({ length: total }, (_, i) => (
-            <button
-              key={i}
-              onClick={() => goTo(i)}
-              aria-label={`${i + 1}`}
-              className="flex h-10 w-9 items-center justify-center"
-            >
-              <span
-                className={`block rounded-full transition ${
-                  i === page ? 'h-2 w-2 bg-fg' : beaten[i] ? 'h-1.5 w-1.5 bg-fg' : 'h-1.5 w-1.5 bg-faint'
-                }`}
-              />
-            </button>
-          ))}
+        <div className="flex shrink-0 items-center px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+          <span className="w-11 shrink-0" />
+          <div className="flex min-w-0 flex-1 justify-center">
+            {Array.from({ length: total }, (_, i) => (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                aria-label={`${i + 1}`}
+                className="flex h-10 w-9 min-w-0 shrink items-center justify-center"
+              >
+                <span
+                  className={`block shrink-0 rounded-full transition ${
+                    i === page ? 'h-2 w-2 bg-fg' : beaten[i] ? 'h-1.5 w-1.5 bg-fg' : 'h-1.5 w-1.5 bg-faint'
+                  }`}
+                />
+              </button>
+            ))}
+          </div>
+          {/* 今日の種目を一覧で組み直す（順番・足す・外す）。片手で届く右下に */}
+          <button
+            onClick={() => nav(`/today?s=${session.id}`)}
+            aria-label="組み直す"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-dim transition active:text-fg"
+          >
+            <Icon name="list" />
+          </button>
         </div>
       )}
       {replacing && (
@@ -235,15 +255,21 @@ export default function SessionPage() {
               <Icon name="down" />
             </button>
           </div>
-          {unused.map((e) => (
-            <button
-              key={e.id}
-              onClick={() => void replaceExercise(replacing, e)}
-              className="flex h-14 w-full items-center justify-between border-b border-line text-left transition active:text-dim"
-            >
-              <span className="truncate">{e.name}</span>
-              <Icon name="arrow" size={18} className="shrink-0 text-faint" />
-            </button>
+          {/* 入れ替える種目と同じ部位を先に */}
+          {byPart(unused, [...partsOf([panels.find((p) => p.se.id === replacing.id)?.ex.body_part]), ...todayParts]).map((g) => (
+            <Fragment key={g.label}>
+              <span className="mt-4 block text-[11px] text-faint">{g.label}</span>
+              {g.items.map((e) => (
+                <button
+                  key={e.id}
+                  onClick={() => void replaceExercise(replacing, e)}
+                  className="flex h-14 w-full items-center justify-between border-b border-line text-left transition active:text-dim"
+                >
+                  <span className="truncate">{e.name}</span>
+                  <Icon name="arrow" size={18} className="shrink-0 text-faint" />
+                </button>
+              ))}
+            </Fragment>
           ))}
         </div>
       )}
@@ -259,6 +285,15 @@ export default function SessionPage() {
       )}
     </div>
   )
+}
+
+/** 種目を部位ごとに。first の部位を先に（重複は無視）、部位のない種目は最後に */
+function byPart(exercises: Exercise[], first: BodyPart[]): { label: string; items: Exercise[] }[] {
+  const order = [...new Set([...first, ...BODY_PARTS])]
+  return [
+    ...order.map((p) => ({ label: BODY_PART_LABEL[p], items: exercises.filter((e) => e.body_part === p) })),
+    { label: 'その他', items: exercises.filter((e) => !e.body_part) },
+  ].filter((g) => g.items.length)
 }
 
 /**

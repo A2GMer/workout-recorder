@@ -13,6 +13,10 @@ export const BODY_PART_LABEL: Record<BodyPart, string> = {
   core: '腹',
 }
 
+export const BODY_PARTS = Object.keys(BODY_PART_LABEL) as BodyPart[]
+
+export const partsName = (parts: BodyPart[]) => parts.map((p) => BODY_PART_LABEL[p]).join('・')
+
 /** 同期対象の行に共通するカラム */
 export interface Synced {
   id: string

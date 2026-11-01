@@ -189,7 +189,7 @@ export function ExercisePanel({
     rows.push(row)
   }
   const mainVolume = volume(
-    rows.map((r) => ({ weight_kg: r.weight, reps: r.reps })),
+    rows.map((r) => ({ weight_kg: r.weight, reps: r.reps, cheat_reps: r.cheat })),
     ex.equipment,
     bw,
   )
@@ -238,7 +238,7 @@ export function ExercisePanel({
   // 次に記録するセット（提案どおり）で前回を超えるなら予告する
   const nextRow = rows.find((r) => !r.rec)
   const remaining = delta === null ? null : Math.max(1, -delta + 1)
-  const nextSetVolume = nextRow ? effectiveWeight(ex.equipment, nextRow.weight, bw) * nextRow.reps : 0
+  const nextSetVolume = nextRow ? effectiveWeight(ex.equipment, nextRow.weight, bw) * (nextRow.reps + nextRow.cheat) : 0
   const nextBeats = !beat && remaining !== null && nextRow !== undefined && nextSetVolume >= remaining
 
   // ---- 操作 ----

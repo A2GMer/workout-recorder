@@ -6,9 +6,7 @@ import {
   getSettings,
   journey,
   listExercises,
-  listRoutines,
   patch,
-  routineSummary,
   save,
   type ExerciseSummary,
 } from '../data/repo'
@@ -133,34 +131,21 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
   </section>
 )
 
-const AddButton = ({ onClick, label }: { onClick: () => void; label: string }) => (
-  <button
-    onClick={onClick}
-    aria-label={label}
-    className="flex h-14 items-center justify-center rounded-2xl border border-dashed border-line text-faint active:text-fg"
-  >
-    <Icon name="plus" />
-  </button>
-)
-
 export default function SettingsPage() {
   const data = useLiveQuery(async () => {
     const exercises = await listExercises()
-    const routines = await listRoutines()
     return {
       settings: await getSettings(),
       exercises,
-      routines,
-      // 歩み: 種目ごとの最大重量と伸び、メニューごとの回数と連続更新、はじめてからの日数
+      // 歩み: 種目ごとの最大重量と伸び、はじめてからの日数
       exerciseSummaries: new Map(await Promise.all(exercises.map(async (e) => [e.id, await exerciseSummary(e)] as const))),
-      routineSummaries: new Map(await Promise.all(routines.map(async (r) => [r.id, await routineSummary(r.id)] as const))),
       journey: await journey(),
     }
   })
   const nav = useNavigate()
   const [open, setOpen] = useState<string | null>(null)
   if (!data) return null
-  const { settings, exercises, routines, exerciseSummaries, routineSummaries } = data
+  const { settings, exercises, exerciseSummaries } = data
 
   const saveSettings = (c: Partial<Settings>) => save<Settings>('settings', { ...settings, ...c })
 
@@ -223,29 +208,6 @@ export default function SettingsPage() {
           </div>
         </Section>
 
-        <Section title="MENU">
-          {routines.map((r) => {
-            const s = routineSummaries.get(r.id)
-            return (
-              <button
-                key={r.id}
-                onClick={() => nav(`/menu/${r.id}`)}
-                className="flex h-16 items-center gap-3 rounded-2xl bg-panel px-5 text-left"
-              >
-                <span className="min-w-0 flex-1 truncate">{r.name}</span>
-                {/* 積み上げ: 回数と、全種目で前回を超え続けている回数 */}
-                {s && s.sessions > 0 && (
-                  <span className="shrink-0 text-xs text-dim">
-                    {s.sessions}回{s.streak > 0 && <span className="text-fg"> · {s.streak}連続更新</span>}
-                  </span>
-                )}
-                <Icon name="back" size={18} className="shrink-0 rotate-180 text-faint" />
-              </button>
-            )
-          })}
-          <AddButton onClick={() => nav('/menu/new')} label="メニュー作成" />
-        </Section>
-
         <Section title="EXERCISE">
           {exercises.map((e) => (
             <ExerciseEditor
@@ -257,7 +219,7 @@ export default function SettingsPage() {
             />
           ))}
           <p className="px-2 text-xs leading-5 text-faint">
-            右は今の最大重量と、初回からの伸び。種目はメニュー作成の中で追加します
+            右は今の最大重量と、初回からの伸び。種目は今日を組むときに追加します
           </p>
         </Section>
 

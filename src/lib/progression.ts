@@ -11,7 +11,10 @@ export interface Ctx {
 
 export interface SetLike {
   weight_kg: number
+  /** 厳密な回数（達成判定に使う） */
   reps: number
+  /** チーティングの回数。ボリュームには加算し、達成判定には含めない */
+  cheat_reps?: number
 }
 
 export interface PrevPerformance {
@@ -56,8 +59,11 @@ export function effectiveWeight(eq: Equipment, weight: number, bodyWeight: numbe
   return eq === 'bodyweight' ? bodyWeight + weight : weight
 }
 
+/** セットボリューム = 有効重量 × (厳密回数 + チーティング回数) の合計 */
 export function volume(sets: SetLike[], eq: Equipment, bodyWeight: number): number {
-  return fix(sets.reduce((s, x) => s + effectiveWeight(eq, x.weight_kg, bodyWeight) * x.reps, 0))
+  return fix(
+    sets.reduce((s, x) => s + effectiveWeight(eq, x.weight_kg, bodyWeight) * (x.reps + (x.cheat_reps ?? 0)), 0),
+  )
 }
 
 export type FatigueLevel = 'light' | 'normal' | 'heavy'

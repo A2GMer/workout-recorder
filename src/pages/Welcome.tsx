@@ -8,7 +8,6 @@ import { PrimaryButton, Question } from '../ui/Flow'
 import { Icon, WaveArt } from '../ui/Icon'
 import { HoldButton } from '../ui/Stepper'
 import { TopBar } from '../ui/TopBar'
-import { MenuWizard } from './MenuWizard'
 
 const ONBOARDED_KEY = 'onboarded'
 
@@ -28,10 +27,10 @@ function markOnboarded() {
   }
 }
 
-type Step = 'intro' | 'body' | 'menu' | 'howto'
+type Step = 'intro' | 'body' | 'howto'
 
 /**
- * 初回チュートリアル（一方通行）: はじめに → 体重 → メニュー作成（部位 → 種目 → 順番） → 使い方
+ * 初回チュートリアル（一方通行）: はじめに → 体重 → 使い方。メニューはその日にホームから組む
  * /welcome?howto で使い方だけを見られる
  */
 export default function Welcome() {
@@ -65,17 +64,7 @@ export default function Welcome() {
     )
   }
 
-  if (step === 'body') return <BodyStep onBack={() => setStep('intro')} onNext={() => setStep('menu')} />
-
-  if (step === 'menu') {
-    return (
-      <MenuWizard
-        progress={{ offset: 1, total: 4 }}
-        onCancel={() => setStep('body')}
-        onDone={() => setStep('howto')}
-      />
-    )
-  }
+  if (step === 'body') return <BodyStep onBack={() => setStep('intro')} onNext={() => setStep('howto')} />
 
   return <HowTo onDone={done} />
 }
@@ -101,7 +90,7 @@ function BodyStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }
   }
   return (
     <div className="flex h-full flex-col">
-      <TopBar onBack={onBack} title="はじめに" sub="1 / 4" />
+      <TopBar onBack={onBack} title="はじめに" />
       <Question sub="体重は自重種目のボリュームに、身長は体のプロポーション目標に使います">体重と身長は？</Question>
       <div className="flex flex-1 flex-col items-center justify-center gap-10">
         <BigStepper label="体重" unit="kg" value={String(bw)} onAdd={addWeight} />
@@ -149,8 +138,8 @@ function HowTo({ onDone }: { onDone: () => void }) {
   const [i, setI] = useState(0)
   const slides = [
     {
-      title: 'メニューをタップで開始',
-      body: '中央には次にやるメニューが表示されます。前回より挑戦的なほど、模様が激しく動きます。',
+      title: '部位を選んで今日を組む',
+      body: '前回その部位でやった種目が並びます。混んでいる・痛い種目は外して開始。始めた後も組み直せます。',
       art: <BodyArt parts={['chest', 'back']} intensity={0.8} className="h-48 w-48 text-fg" />,
     },
     {

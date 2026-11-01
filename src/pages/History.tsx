@@ -2,11 +2,12 @@ import { lazy, Suspense, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, useNavigate } from 'react-router-dom'
 import { db } from '../data/db'
-import { getSettings, listExercises, listMeasurements, listSessions, localDate, remove, sessionProgress } from '../data/repo'
+import { getSettings, listExercises, listMeasurements, listSessions, localDate, remove, sessionExercises, sessionProgress, setsOf } from '../data/repo'
 import { addMonths, monthGrid, WEEKDAYS } from '../lib/calendar'
 import { fmtVolume, md, num } from '../lib/format'
 import { figureOf, idealTargets, proposals } from '../lib/ideal'
-import { BODY_PART_LABEL } from '../lib/types'
+import { partsOf } from '../lib/plan'
+import { BODY_PART_LABEL, partsName, type BodyPart } from '../lib/types'
 import { TopBar } from '../ui/TopBar'
 import { Icon } from '../ui/Icon'
 
@@ -81,7 +82,12 @@ export default function History() {
     for (const s of await listSessions()) {
       // 総ボリューム、記録のある種目数、前回と比べられた種目数とそのうち前回を超えた数
       const { volume: total, recorded: count, compared, improved } = await sessionProgress(s, exercises)
-      rows.push({ id: s.id, date: s.date, total, count, compared, improved, name: s.routine_id ? routines.get(s.routine_id) : undefined })
+      // 名前: メニューから始めた回はメニュー名、部位から組んだ回は実際に記録した種目の部位（胸・腕）
+      const done: (BodyPart | null | undefined)[] = []
+      for (const se of await sessionExercises(s.id)) if ((await setsOf(se.id)).length) done.push(exercises.get(se.exercise_id)?.body_part)
+      const parts = partsOf(done)
+      const name = (s.routine_id ? routines.get(s.routine_id) : undefined) ?? (parts.length ? partsName(parts) : undefined)
+      rows.push({ id: s.id, date: s.date, total, count, compared, improved, name })
     }
     return { rows, measured: new Set((await listMeasurements()).map((m) => m.date)) }
   })

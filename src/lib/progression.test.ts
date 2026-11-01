@@ -93,6 +93,14 @@ describe('suggest', () => {
     expect(s.mainReps).toEqual([3, 3, 3, 3, 3])
   })
 
+  it('チーティングはボリュームに加算し、達成判定には含めない', () => {
+    const main = [...sets(100, 3, 3, 3, 3), { weight_kg: 100, reps: 2, cheat_reps: 1 }]
+    expect(volume(main, 'barbell', 70)).toBe(100 * 15) // 2+1 を 3 回ぶんとして足す
+    const s = suggest(bench, prev({ main }))
+    expect(s.achieved).toBe(false) // 厳密には 2 回なので未達
+    expect(s.prevVolume).toBe(1500)
+  })
+
   it('前回ボリュームはバックオフ込み', () => {
     const s = suggest(bench, prev({ main: sets(100, 3, 3, 3, 3, 3), backoff: sets(60, 10) }))
     expect(s.prevVolume).toBe(2100)

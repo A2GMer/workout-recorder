@@ -4,21 +4,22 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   allImproved,
   getSettings,
-  lastSessionOf,
+  listExercises,
   listMeasurements,
-  listRoutines,
   listSessions,
   localDate,
-  routineProfile,
-  routineSummary,
+  planOutlook,
+  recentByPart,
+  sessionExercises,
   sessionProgress,
-  startSession,
+  todaySession,
 } from '../data/repo'
 import { figureOf, idealTargets, proposals, type DimKey } from '../lib/ideal'
 import { isMeasureDue } from '../lib/measure'
 import { md, num } from '../lib/format'
+import { nextParts, partsOf } from '../lib/plan'
 import { fix } from '../lib/progression'
-import { MEASURE_ITEMS, type BodyPart, type Measurement } from '../lib/types'
+import { BODY_PART_LABEL, BODY_PARTS, MEASURE_ITEMS, partsName, type BodyPart, type Exercise, type Measurement } from '../lib/types'
 import { DIMS_OF_PART, RANDOM } from '../ui/Figure3D'
 
 // 3D（three.js とモデル）は別チャンク。読み込むまでは線画を出す
@@ -31,16 +32,20 @@ import { isOnboarded } from './Welcome'
 
 export default function Home() {
   const nav = useNavigate()
-  const routines = useLiveQuery(async () => {
-    const rs = await listRoutines()
-    return Promise.all(
-      rs.map(async (r) => ({
-        ...r,
-        last: await lastSessionOf(r.id),
-        profile: await routineProfile(r.id),
-        streak: (await routineSummary(r.id)).streak,
-      })),
-    )
+  // 今日: 始めていればその部位と進み具合。まだなら次に鍛える部位（一番空いている部位）と、前回の種目での見どころ
+  const plan = useLiveQuery(async () => {
+    const recent = await recentByPart()
+    const last = new Map([...recent].map(([p, r]) => [p, r.date]))
+    const today = await todaySession()
+    if (today) {
+      const byId = new Map((await listExercises(true)).map((e) => [e.id, e]))
+      const exercises = (await sessionExercises(today.id)).map((se) => byId.get(se.exercise_id)).filter((e): e is Exercise => !!e)
+      const { recorded } = await sessionProgress(today, byId)
+      return { last, today, parts: partsOf(exercises.map((e) => e.body_part)), count: exercises.length, recorded, intensity: 0.5, weightUps: 0 }
+    }
+    const parts = nextParts(Object.fromEntries(last), localDate())
+    const outlook = await planOutlook(parts.flatMap((p) => recent.get(p)?.exercises ?? []))
+    return { last, today: null, parts, count: 0, recorded: 0, ...outlook }
   })
 
   // 直近のセッションの連なり（古い → 新しい）。全種目で前回を超えた回は塗りつぶし
@@ -65,24 +70,22 @@ export default function Home() {
   const measureDue = body?.due
   const [snoozed, setSnoozed] = useState(() => readSnooze() === localDate())
 
-  // 次にやるメニュー = 未実施、または最後に行ってから一番時間が空いているもの
-  const next = routines?.length
-    ? [...routines].sort((a, b) => (a.last?.date ?? '') .localeCompare(b.last?.date ?? '') || a.sort_order - b.sort_order)[0]
-    : undefined
+  // 初回（記録が1つもなく、チュートリアル未完了）はチュートリアルへ
+  if (plan && !plan.today && plan.last.size === 0 && !isOnboarded()) return <Navigate to="/welcome" replace />
 
-  // 初回（メニューが1つもなく、チュートリアル未完了）はチュートリアルへ
-  if (routines?.length === 0 && !isOnboarded()) return <Navigate to="/welcome" replace />
-
+  const parts = plan?.parts ?? []
   const art = (
     <BodyArt
-      parts={next?.profile.parts ?? []}
-      intensity={next?.profile.intensity ?? 0.2}
+      parts={parts}
+      intensity={plan?.intensity ?? 0.2}
       className="aspect-square max-h-[340px] min-h-0 w-full max-w-[340px] flex-1 text-fg"
     />
   )
+  const nextLabel = plan?.today ? partsName(parts) || '今日の続き' : parts.length ? partsName(parts) : '今日を組む'
 
-  async function start(id: string) {
-    nav(`/s/${await startSession(id)}`)
+  function openNext() {
+    if (plan?.today) nav(`/s/${plan.today.id}`)
+    else nav(parts.length ? `/today?parts=${parts.join(',')}` : '/today')
   }
 
   return (
@@ -133,7 +136,7 @@ export default function Home() {
               <Figure3D
                 figure={body.figure}
                 showTarget={!!body.height && body.list.length > 0}
-                emphasis={emphasisOf(next?.profile.parts ?? [])}
+                emphasis={emphasisOf(parts)}
                 sex={body.sex}
                 motion={RANDOM}
                 className="h-full w-full text-fg"
@@ -149,20 +152,22 @@ export default function Home() {
             </svg>
           </div>
         </div>
-        {next && (
+        {plan && (
           <button
-            onClick={() => start(next.id)}
-            aria-label={`${next.name}を開始`}
+            onClick={openNext}
+            aria-label={plan.today ? `今日の続き ${nextLabel}` : `今日を組む ${nextLabel}`}
             style={{ '--delay': '0.15s' } as React.CSSProperties}
             className="rise flex flex-col items-center gap-1 rounded-2xl px-6 py-2 transition active:bg-panel"
           >
-            <span className="text-[11px] tracking-[0.2em] text-dim">NEXT</span>
+            <span className="text-[11px] tracking-[0.2em] text-dim">{plan.today ? 'TODAY' : 'NEXT'}</span>
             <span className="flex items-center gap-2 text-lg">
-              {next.name}
+              {nextLabel}
               <Icon name="arrow" size={18} className="nudge text-dim" />
             </span>
-            {/* 今日の見どころ: 重量が上がる種目数と、守っている連続更新 */}
-            <span className="h-4 text-[11px] leading-4 text-dim">{outlook(next.profile.weightUps, next.streak)}</span>
+            {/* 始めていれば進み具合、まだなら前回の種目で重量が上がる数 */}
+            <span className="h-4 text-[11px] leading-4 text-dim">
+              {plan.today ? (plan.count ? `${plan.recorded}/${plan.count} 種目` : '') : outlook(plan.weightUps)}
+            </span>
           </button>
         )}
       </div>
@@ -191,33 +196,27 @@ export default function Home() {
         </button>
       )}
 
+      {/* 部位。最後に鍛えた日を小さく。タップでその部位から今日を組む（始めていれば組み直し） */}
       <nav
         style={{ '--delay': '0.5s' } as React.CSSProperties}
-        className="no-scrollbar rise relative flex shrink-0 snap-x gap-2 overflow-x-auto px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+2rem)]"
+        className="rise relative grid shrink-0 grid-cols-6 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+2rem)]"
       >
-        {routines?.map((r) => (
-          <button
-            key={r.id}
-            onClick={() => start(r.id)}
-            className={`flex w-[84px] shrink-0 snap-center flex-col items-center gap-2 transition first:ml-auto last:mr-auto active:text-fg ${
-              r.id === next?.id ? 'text-fg' : 'text-dim'
-            }`}
-          >
-            <BodyArt parts={r.profile.parts} intensity={r.profile.intensity} detail={0.55} clip className="h-14 w-14" />
-            <span className="w-full truncate text-center text-[13px] leading-4 text-fg">{r.name}</span>
-            <span className="h-3 text-[11px] leading-3 text-faint">{r.last ? md(r.last.date) : ''}</span>
-          </button>
-        ))}
-        <button
-          onClick={() => nav('/menu/new')}
-          className="flex w-[84px] shrink-0 snap-center flex-col items-center gap-2 text-dim transition first:ml-auto last:mr-auto active:text-fg"
-        >
-          <span className="flex h-14 w-14 items-center justify-center rounded-full border border-dashed border-faint">
-            <Icon name="plus" />
-          </span>
-          <span className="text-[13px] leading-4">メニュー作成</span>
-          <span className="h-3" />
-        </button>
+        {BODY_PARTS.map((p) => {
+          const on = parts.includes(p)
+          const last = plan?.last.get(p)
+          return (
+            <button
+              key={p}
+              onClick={() => nav(`/today?parts=${p}`)}
+              aria-label={`${BODY_PART_LABEL[p]}で今日を組む`}
+              className={`flex min-w-0 flex-col items-center gap-2 transition active:text-fg ${on ? 'text-fg' : 'text-dim'}`}
+            >
+              <BodyArt parts={[p]} intensity={on ? 0.5 : 0.2} detail={0.55} clip className="h-12 w-12" />
+              <span className="text-[13px] leading-4 text-fg">{BODY_PART_LABEL[p]}</span>
+              <span className="h-3 text-[11px] leading-3 text-faint">{last ? md(last) : ''}</span>
+            </button>
+          )
+        })}
       </nav>
     </div>
   )
@@ -358,11 +357,8 @@ function emphasisOf(parts: BodyPart[]): Set<DimKey> {
 }
 
 /** NEXT の下の一言。何もなければ空（初回など） */
-function outlook(weightUps: number, streak: number): string {
-  const marks: string[] = []
-  if (weightUps > 0) marks.push(`重量アップ ${weightUps} 種目`)
-  if (streak > 0) marks.push(`${streak}回連続更新中`)
-  return marks.join(' · ')
+function outlook(weightUps: number): string {
+  return weightUps > 0 ? `重量アップ ${weightUps} 種目` : ''
 }
 
 // 計測のお知らせを「今日は表示しない」にした日

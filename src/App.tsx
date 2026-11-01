@@ -8,7 +8,7 @@ import SessionPage from './pages/SessionPage'
 import History from './pages/History'
 import SettingsPage from './pages/SettingsPage'
 import Login from './pages/Login'
-import MenuWizardPage from './pages/MenuWizard'
+import TodayPlanPage from './pages/TodayPlan'
 import Welcome from './pages/Welcome'
 import Body, { Measure } from './pages/Body'
 
@@ -40,8 +40,7 @@ export default function App() {
       <Route path="/welcome" element={<Welcome />} />
       <Route path="/body" element={<Body />} />
       <Route path="/body/measure" element={<Measure />} />
-      <Route path="/menu/new" element={<MenuWizardPage />} />
-      <Route path="/menu/:id" element={<MenuWizardPage />} />
+      <Route path="/today" element={<TodayPlanPage />} />
       {Patterns && (
         <Route path="/patterns" element={<Suspense><Patterns /></Suspense>} />
       )}

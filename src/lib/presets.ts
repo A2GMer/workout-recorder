@@ -1,7 +1,7 @@
 import type { BodyPart, Equipment, Exercise } from './types'
 
 /**
- * 事前登録の種目。メニュー作成で選ばれた時点で種目として作られる。
+ * 事前登録の種目。今日を組むときに選ばれ、開始した時点で種目として作られる。
  * heavy: 高重量（3回×5セット + バックオフ）/ それ以外は中重量（8回×3セット）
  */
 export interface Preset {

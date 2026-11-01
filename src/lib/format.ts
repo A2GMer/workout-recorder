@@ -15,13 +15,14 @@ export function fmtVolume(v: number): string {
 
 export const md = (date: string) => date.slice(5).replace('-', '/')
 
-/** 100×3,3,3 · 60×10 のように重量ごとにまとめる */
-export function fmtSets(eq: Equipment, sets: { weight_kg: number; reps: number }[]): string {
-  const groups: { w: number; reps: number[] }[] = []
+/** 100×3,3,3 · 60×10 のように重量ごとにまとめる。チーティングがあれば 3+1 と書く */
+export function fmtSets(eq: Equipment, sets: { weight_kg: number; reps: number; cheat_reps?: number }[]): string {
+  const groups: { w: number; reps: string[] }[] = []
   for (const s of sets) {
+    const r = s.cheat_reps ? `${s.reps}+${s.cheat_reps}` : String(s.reps)
     const g = groups[groups.length - 1]
-    if (g && g.w === s.weight_kg) g.reps.push(s.reps)
-    else groups.push({ w: s.weight_kg, reps: [s.reps] })
+    if (g && g.w === s.weight_kg) g.reps.push(r)
+    else groups.push({ w: s.weight_kg, reps: [r] })
   }
   return groups.map((g) => `${fmtWeight(eq, g.w)}×${g.reps.join(',')}`).join(' · ')
 }
