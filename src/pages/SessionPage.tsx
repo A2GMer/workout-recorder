@@ -3,8 +3,12 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate, useParams } from 'react-router-dom'
 import { db } from '../data/db'
 import {
+  candidateOf,
+  ensureExercises,
   exerciseHistory,
+  exerciseSummary,
   getSettings,
+  listCandidates,
   listExercises,
   listMeasurements,
   patch,
@@ -14,12 +18,25 @@ import {
   sessionExercises,
   setsOf,
   uuid,
+  type Candidate,
+  type ExerciseSummary,
 } from '../data/repo'
 import { figureOf, idealTargets } from '../lib/ideal'
-import { fmtVolume, md, num } from '../lib/format'
+import { fmtVolume, fmtWeight, md, num } from '../lib/format'
 import { partsOf } from '../lib/plan'
+import { movementOf } from '../lib/presets'
 import { fix, volume } from '../lib/progression'
-import { BODY_PART_LABEL, BODY_PARTS, type BodyPart, type Exercise, type Session, type SessionExercise, type Settings } from '../lib/types'
+import {
+  BODY_PART_LABEL,
+  BODY_PARTS,
+  EQUIPMENT_LABEL,
+  MOVEMENTS,
+  type BodyPart,
+  type Exercise,
+  type Session,
+  type SessionExercise,
+  type Settings,
+} from '../lib/types'
 import { DIMS_OF_PART, MOTION_OF_PART, RANDOM } from '../ui/Figure3D'
 
 // 背景の 3D は別チャンク
@@ -61,6 +78,21 @@ export default function SessionPage() {
   const [page, setPage] = useState(0)
   // 種目の入れ替え先を選んでいるパネル
   const [replacing, setReplacing] = useState<SessionExercise | null>(null)
+  // 入れ替え先の候補: 同じ動き → 同じ部位（どちらもまだ作っていない事前登録を含む）。作成済みの種目は今の最大重量つき
+  const replaceOptions = useLiveQuery(async () => {
+    if (!replacing) return null
+    const ex = await db.exercises.get(replacing.exercise_id)
+    if (!ex) return null
+    const inSession = new Set((await sessionExercises(replacing.session_id)).map((se) => se.exercise_id))
+    const pool = (await listCandidates()).filter((c) => !c.exercise || !inSession.has(c.exercise.id))
+    const movement = movementOf(ex)
+    const same = movement ? pool.filter((c) => c.movement === movement) : []
+    const part = ex.body_part ? pool.filter((c) => c.part === ex.body_part && !same.includes(c)) : []
+    const summaries = new Map(
+      await Promise.all(pool.flatMap((c) => (c.exercise ? [c.exercise] : [])).map(async (e) => [e.id, await exerciseSummary(e)] as const)),
+    )
+    return { ex, movement, same, part, summaries }
+  }, [replacing?.id])
   const scroller = useRef<HTMLDivElement>(null)
 
   if (data === undefined) return null
@@ -112,10 +144,11 @@ export default function SessionPage() {
     await remove('session_exercises', p.se.id)
   }
 
-  /** 別の種目に入れ替える（記録がないときだけ。順番はそのまま） */
-  async function replaceExercise(se: SessionExercise, ex: Exercise) {
+  /** 別の種目に入れ替える（記録がないときだけ。順番はそのまま）。まだ作っていない事前登録はここで作る */
+  async function replaceExercise(se: SessionExercise, c: Candidate) {
     setReplacing(null)
-    await patch<SessionExercise>('session_exercises', se.id, { exercise_id: ex.id })
+    const [exerciseId] = await ensureExercises([c])
+    await patch<SessionExercise>('session_exercises', se.id, { exercise_id: exerciseId })
   }
 
   async function addExercise(exerciseId: string) {
@@ -151,7 +184,7 @@ export default function SessionPage() {
   })
   const title = current ? current.ex.name : '今日'
   const sub = current
-    ? `${current.ex.target_reps}回 × ${current.ex.main_sets}${current.ex.pyramid ? ' + B' : ''}`
+    ? `${current.ex.anchor ? '軸 · ' : ''}${current.ex.target_reps}回 × ${current.ex.main_sets}${current.ex.pyramid ? ' + B' : ''}`
     : md(session.date)
 
   return (
@@ -192,7 +225,7 @@ export default function SessionPage() {
               canForward: i < panels.length - 1,
               onMove: (dir) => void move(i, dir),
               onDrop: () => void dropExercise(p),
-              onReplace: unused.length && !p.sets.length ? () => setReplacing(p.se) : undefined,
+              onReplace: !p.sets.length ? () => setReplacing(p.se) : undefined,
             }}
           />
         ))}
@@ -249,27 +282,38 @@ export default function SessionPage() {
       )}
       {replacing && (
         <div className="fixed inset-x-0 bottom-0 z-20 max-h-[60%] overflow-y-auto rounded-t-[28px] border-t border-line bg-panel px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-          <div className="relative flex h-12 items-center justify-center">
-            <span className="text-sm">入れ替える種目</span>
+          <div className="relative flex h-12 items-center justify-center px-12">
+            <span className="truncate text-sm">{replaceOptions ? `${replaceOptions.ex.name} の代わり` : '入れ替える種目'}</span>
             <button onClick={() => setReplacing(null)} aria-label="閉じる" className="absolute right-0 flex h-11 w-11 items-center justify-center text-dim">
               <Icon name="down" />
             </button>
           </div>
-          {/* 入れ替える種目と同じ部位を先に */}
-          {byPart(unused, [...partsOf([panels.find((p) => p.se.id === replacing.id)?.ex.body_part]), ...todayParts]).map((g) => (
-            <Fragment key={g.label}>
-              <span className="mt-4 block text-[11px] text-faint">{g.label}</span>
-              {g.items.map((e) => (
-                <button
-                  key={e.id}
-                  onClick={() => void replaceExercise(replacing, e)}
-                  className="flex h-14 w-full items-center justify-between border-b border-line text-left transition active:text-dim"
-                >
-                  <span className="truncate">{e.name}</span>
-                  <Icon name="arrow" size={18} className="shrink-0 text-faint" />
-                </button>
-              ))}
-            </Fragment>
+          {/* 同じ動き（器具や種目を替えても同じところに効く）→ 同じ部位。混んでいるときはここから */}
+          {replaceOptions?.movement && (
+            <ReplaceGroup
+              label={`同じ動き · ${MOVEMENTS[replaceOptions.movement].label}`}
+              items={replaceOptions.same}
+              summaries={replaceOptions.summaries}
+              onPick={(c) => void replaceExercise(replacing, c)}
+            />
+          )}
+          {replaceOptions?.ex.body_part && (
+            <ReplaceGroup
+              label={`${BODY_PART_LABEL[replaceOptions.ex.body_part]}のほかの種目`}
+              items={replaceOptions.part}
+              summaries={replaceOptions.summaries}
+              onPick={(c) => void replaceExercise(replacing, c)}
+            />
+          )}
+          {/* ほかの部位は作成済みの種目だけ。今日の部位を先に */}
+          {byPart(unused.filter((e) => e.body_part !== replaceOptions?.ex.body_part), todayParts).map((g) => (
+            <ReplaceGroup
+              key={g.label}
+              label={g.label}
+              items={g.items.map(candidateOf)}
+              summaries={replaceOptions?.summaries}
+              onPick={(c) => void replaceExercise(replacing, c)}
+            />
           ))}
         </div>
       )}
@@ -284,6 +328,37 @@ export default function SessionPage() {
         />
       )}
     </div>
+  )
+}
+
+/** 入れ替え先のまとまり。作成済みの種目は今の最大重量、まだなら器具を右に */
+function ReplaceGroup({ label, items, summaries, onPick }: {
+  label: string
+  items: Candidate[]
+  summaries?: Map<string, ExerciseSummary>
+  onPick: (c: Candidate) => void
+}) {
+  if (!items.length) return null
+  return (
+    <>
+      <span className="mt-4 block text-[11px] text-faint">{label}</span>
+      {items.map((c) => {
+        const top = c.exercise ? summaries?.get(c.exercise.id)?.topWeight : null
+        return (
+          <button
+            key={c.key}
+            onClick={() => onPick(c)}
+            className="flex h-14 w-full items-center gap-3 border-b border-line text-left transition active:text-dim"
+          >
+            <span className="min-w-0 flex-1 truncate">{c.name}</span>
+            <span className="shrink-0 text-[11px] text-faint">
+              {top !== null && top !== undefined ? `${fmtWeight(c.equipment, top)}kg` : EQUIPMENT_LABEL[c.equipment]}
+            </span>
+            <Icon name="arrow" size={18} className="shrink-0 text-faint" />
+          </button>
+        )
+      })}
+    </>
   )
 }
 

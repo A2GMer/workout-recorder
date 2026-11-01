@@ -5,6 +5,7 @@ import type {
   Equipment,
   Exercise,
   Measurement,
+  Movement,
   Session,
   SessionExercise,
   Settings,
@@ -12,9 +13,12 @@ import type {
   WorkSet,
 } from '../lib/types'
 import { BODY_PARTS } from '../lib/types'
-import { challenge, fix, streak, suggest, volume, type PrevPerformance } from '../lib/progression'
+import { challenge, fix, streak, suggest, volume, type PrevPerformance, type SetLike } from '../lib/progression'
+import { anchorOf, inWeek, sumByPart } from '../lib/plan'
+import { bestE1rm, changeIn, measureSeries, perWeek } from '../lib/growth'
+import { monthRange } from '../lib/calendar'
 import { idealTargets, proposals } from '../lib/ideal'
-import { exerciseDefaults, PRESETS } from '../lib/presets'
+import { exerciseDefaults, movementOf, PRESETS } from '../lib/presets'
 
 export const uuid = () => crypto.randomUUID()
 
@@ -52,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   measure_interval_days: 14,
   height_cm: null,
   sex: 'male',
+  weekly_sets: 10,
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -64,6 +69,7 @@ export async function getSettings(): Promise<Settings> {
     measure_interval_days: s?.measure_interval_days ?? DEFAULT_SETTINGS.measure_interval_days,
     height_cm: s?.height_cm ?? null,
     sex: s?.sex ?? DEFAULT_SETTINGS.sex,
+    weekly_sets: s?.weekly_sets ?? DEFAULT_SETTINGS.weekly_sets,
   }
 }
 
@@ -204,6 +210,27 @@ export async function planToday(candidates: Candidate[], sessionId?: string): Pr
   return id
 }
 
+/**
+ * 直近7日（今日を含む）に記録したセット数（メイン + バックオフ）を部位ごとに。
+ * except のセッションは数えない（組み直し中の回は、記録ではなく予定のセット数で数えるため）
+ */
+export async function weekSetsByPart(except?: string): Promise<Map<BodyPart, number>> {
+  const today = localDate()
+  return setsByPartIn((s) => s.id !== except && inWeek(s.date, today))
+}
+
+/** 記録したセット数（メイン + バックオフ）を部位ごとに。pred に合うセッションだけ数える */
+async function setsByPartIn(pred: (s: Session) => boolean): Promise<Map<BodyPart, number>> {
+  const byId = new Map((await listExercises(true)).map((e) => [e.id, e]))
+  const sessions = new Set((await listSessions()).filter(pred).map((s) => s.id))
+  const sets = new Map<string, number>()
+  for (const w of (await db.work_sets.toArray()).filter(alive)) sets.set(w.session_exercise_id, (sets.get(w.session_exercise_id) ?? 0) + 1)
+  const items = (await db.session_exercises.toArray())
+    .filter((se) => alive(se) && sessions.has(se.session_id))
+    .map((se) => ({ part: byId.get(se.exercise_id)?.body_part, sets: sets.get(se.id) ?? 0 }))
+  return sumByPart(items)
+}
+
 /** 部位ごとの前回: 最後に鍛えた日と、その回にやったその部位の種目（並び順。アーカイブした種目は除く） */
 export interface PartRecent {
   date: string
@@ -254,6 +281,7 @@ export interface Candidate {
   key: string
   name: string
   part: BodyPart | null
+  movement: Movement | null
   equipment: Equipment
   heavy: boolean
   /** 作成済みならその種目。未作成（事前登録・新規）は保存時に作る */
@@ -264,6 +292,7 @@ export const candidateOf = (e: Exercise): Candidate => ({
   key: e.id,
   name: e.name,
   part: e.body_part ?? null,
+  movement: movementOf(e),
   equipment: e.equipment,
   heavy: e.pyramid,
   exercise: e,
@@ -278,6 +307,7 @@ export async function listCandidates(): Promise<Candidate[]> {
       key: `preset:${p.name}`,
       name: p.name,
       part: p.part,
+      movement: p.movement,
       equipment: p.equipment,
       heavy: p.heavy,
     })),
@@ -285,7 +315,7 @@ export async function listCandidates(): Promise<Candidate[]> {
 }
 
 /** 未作成の種目（事前登録・新規）を作り、並び順どおりの種目 ID を返す */
-async function ensureExercises(candidates: Candidate[]): Promise<string[]> {
+export async function ensureExercises(candidates: Candidate[]): Promise<string[]> {
   const exercises = await listExercises(true)
   let order = exercises.length
   const exerciseIds: string[] = []
@@ -299,6 +329,7 @@ async function ensureExercises(candidates: Candidate[]): Promise<string[]> {
       name: c.name,
       equipment: c.equipment,
       body_part: c.part,
+      movement: c.movement,
       ...exerciseDefaults(c.equipment, c.heavy),
       sort_order: order++,
       archived: false,
@@ -307,6 +338,14 @@ async function ensureExercises(candidates: Candidate[]): Promise<string[]> {
     exerciseIds.push(e.id)
   }
   return exerciseIds
+}
+
+/** 軸の種目にする / 外す。部位ごとに1つなので、同じ部位のほかの軸は外す */
+export async function setAnchor(ex: Exercise, on: boolean) {
+  const others = on
+    ? (await listExercises(true)).filter((e) => e.id !== ex.id && e.anchor && e.body_part === ex.body_part)
+    : []
+  await save<Exercise>('exercises', [{ ...ex, anchor: on }, ...others.map((e) => ({ ...e, anchor: false }))])
 }
 
 /** セッションの成績: 前回と比べられた種目数と、そのうち前回を超えた数 */
@@ -391,6 +430,73 @@ export async function exerciseSummary(ex: Exercise): Promise<ExerciseSummary> {
     streak: streak(history.map((h) => h.volume)),
     weightUp: suggest(ex, (await previousPerformance(ex.id, now))?.prev ?? null).achieved,
   }
+}
+
+/** 軸の種目の伸び: 回ごとの推定1RM と、同じ部位の計測（どちらも古い順） */
+export interface Growth {
+  part: BodyPart
+  ex: Exercise
+  /** set はその回で一番高かったメインセット */
+  lifts: { date: string; value: number; set: SetLike }[]
+  /** 並べる計測。部位に対応する計測がなければ null */
+  measure: { label: string; points: { date: string; value: number }[] } | null
+}
+
+/** 部位の並び順に、軸の種目ごとの伸び。軸の種目がない部位は出さない */
+export async function anchorGrowth(): Promise<Growth[]> {
+  const exercises = await listExercises()
+  const measurements = await listMeasurements()
+  const now = nowSession()
+  const out: Growth[] = []
+  for (const part of BODY_PARTS) {
+    const ex = anchorOf(part, exercises)
+    if (!ex) continue
+    const lifts: Growth['lifts'] = []
+    for (const { se, s } of await pastOccurrences(ex.id, now)) {
+      const best = bestE1rm((await setsOf(se.id)).filter((w) => w.kind === 'main'), ex.equipment, s.body_weight_kg)
+      if (best) lifts.push({ date: s.date, ...best })
+    }
+    out.push({ part, ex, lifts: lifts.reverse(), measure: measureSeries(part, measurements) })
+  }
+  return out
+}
+
+/** 月のふりかえりの部位の行 */
+export interface MonthPart {
+  part: BodyPart
+  /** その月の週あたりのセット数 */
+  weekly: number
+  /** 軸の種目の推定1RMの変化（前の月の最後の回 → その月の最後の回）。軸がない・比べられなければ null */
+  lift: { name: string; delta: number; end: number } | null
+  /** 同じ部位の計測の変化。並べる計測がない・比べられなければ null */
+  measure: { label: string; delta: number; end: number } | null
+}
+
+/**
+ * 月のふりかえり（YYYY-MM。今月なら今日まで）: 部位ごとに 重量（軸の推定1RM）· 見た目（計測）· 量（週のセット数）。
+ * その月に鍛えていない部位は出さない
+ */
+export async function monthReview(month: string): Promise<{ from: string; to: string; parts: MonthPart[] }> {
+  const { from, to, days } = monthRange(month, localDate())
+  const sets = await setsByPartIn((s) => s.date >= from && s.date <= to)
+  const growth = new Map((await anchorGrowth()).map((g) => [g.part, g]))
+  const measurements = await listMeasurements()
+  const parts: MonthPart[] = []
+  for (const part of BODY_PARTS) {
+    const n = sets.get(part) ?? 0
+    const g = growth.get(part)
+    const lift = g ? changeIn(g.lifts, from, to) : null
+    if (!n && !lift) continue
+    const series = measureSeries(part, measurements)
+    const measure = series ? changeIn(series.points, from, to) : null
+    parts.push({
+      part,
+      weekly: perWeek(n, days),
+      lift: g && lift ? { name: g.ex.name, delta: lift.delta, end: lift.end.value } : null,
+      measure: series && measure ? { label: series.label, delta: measure.delta, end: measure.end.value } : null,
+    })
+  }
+  return { from, to, parts }
 }
 
 /**

@@ -8,10 +8,21 @@ import {
   listExercises,
   patch,
   save,
+  setAnchor,
   type ExerciseSummary,
 } from '../data/repo'
 import { supabase } from '../data/supabase'
-import { BODY_PART_LABEL, EQUIPMENT_LABEL, type BodyPart, type Equipment, type Exercise, type Settings } from '../lib/types'
+import { movementOf } from '../lib/presets'
+import {
+  BODY_PART_LABEL,
+  EQUIPMENT_LABEL,
+  MOVEMENTS,
+  movementsOf,
+  type BodyPart,
+  type Equipment,
+  type Exercise,
+  type Settings,
+} from '../lib/types'
 import { Icon } from '../ui/Icon'
 import { BodyArt } from '../ui/BodyArt'
 import { TopBar } from '../ui/TopBar'
@@ -205,6 +216,16 @@ export default function SettingsPage() {
                 ))}
               </span>
             </div>
+            <ChoiceField
+              label="週のセット数の目安"
+              unit="部位ごと"
+              value={settings.weekly_sets}
+              options={[6, 8, 10, 12, 15, 20]}
+              onChange={(v) => saveSettings({ weekly_sets: v })}
+            />
+            <p className="pb-2 text-xs leading-5 text-faint">
+              今日を組むとき、直近7日のセット数と並べて出します。筋肥大では、部位ごとに週10セット前後からがよく使われる目安です
+            </p>
           </div>
         </Section>
 
@@ -292,7 +313,7 @@ function ExerciseEditor({ ex, summary, open, toggle }: {
     <div className="rounded-2xl bg-panel">
       <Row
         title={ex.name}
-        meta={`${ex.body_part ? BODY_PART_LABEL[ex.body_part] + '  ' : ''}${EQUIPMENT_LABEL[ex.equipment]}  ${ex.target_reps}×${ex.main_sets}${ex.pyramid ? '+B' : ''}`}
+        meta={`${ex.anchor ? '軸  ' : ''}${ex.body_part ? BODY_PART_LABEL[ex.body_part] + '  ' : ''}${EQUIPMENT_LABEL[ex.equipment]}  ${ex.target_reps}×${ex.main_sets}${ex.pyramid ? '+B' : ''}`}
         right={<Gain ex={ex} s={summary} />}
         open={open}
         toggle={toggle}
@@ -301,8 +322,27 @@ function ExerciseEditor({ ex, summary, open, toggle }: {
         <div className="flex flex-col border-t border-line px-5 pt-4 pb-3">
           <TextField value={ex.name} onCommit={(v) => v.trim() && set({ name: v.trim() })} />
           <div className="mt-3">
-            <PartPicker selected={[ex.body_part]} onToggle={(bp) => set({ body_part: ex.body_part === bp ? null : bp })} />
+            {/* 部位を変えたら軸は外す（軸は部位ごとに1つ） */}
+            <PartPicker selected={[ex.body_part]} onToggle={(bp) => set({ body_part: ex.body_part === bp ? null : bp, anchor: false })} />
           </div>
+          {ex.body_part && (
+            <>
+              {/* 動き: 同じ動きの種目は、混んでいるときの代わりに出る */}
+              <div className="mt-1 grid grid-cols-3 gap-1 rounded-xl bg-chip p-1">
+                {movementsOf(ex.body_part).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => set({ movement: m })}
+                    aria-pressed={movementOf(ex) === m}
+                    className={`h-10 rounded-xl text-[11px] transition ${movementOf(ex) === m ? 'bg-fg text-bg' : 'text-dim'}`}
+                  >
+                    {MOVEMENTS[m].label}
+                  </button>
+                ))}
+              </div>
+              <Toggle label={`${BODY_PART_LABEL[ex.body_part]}の軸の種目`} checked={!!ex.anchor} onChange={(v) => void setAnchor(ex, v)} />
+            </>
+          )}
           <div className="mt-1 mb-2 grid grid-cols-3 gap-1 rounded-xl bg-chip p-1">
             {(Object.keys(EQUIPMENT_LABEL) as Equipment[]).map((eq) => (
               <button

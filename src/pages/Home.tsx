@@ -16,8 +16,9 @@ import {
 } from '../data/repo'
 import { figureOf, idealTargets, proposals, type DimKey } from '../lib/ideal'
 import { isMeasureDue } from '../lib/measure'
+import { addMonths } from '../lib/calendar'
 import { md, num } from '../lib/format'
-import { nextParts, partsOf } from '../lib/plan'
+import { anchorOf, nextParts, partsOf, seedExercises } from '../lib/plan'
 import { fix } from '../lib/progression'
 import { BODY_PART_LABEL, BODY_PARTS, MEASURE_ITEMS, partsName, type BodyPart, type Exercise, type Measurement } from '../lib/types'
 import { DIMS_OF_PART, RANDOM } from '../ui/Figure3D'
@@ -44,7 +45,9 @@ export default function Home() {
       return { last, today, parts: partsOf(exercises.map((e) => e.body_part)), count: exercises.length, recorded, intensity: 0.5, weightUps: 0 }
     }
     const parts = nextParts(Object.fromEntries(last), localDate())
-    const outlook = await planOutlook(parts.flatMap((p) => recent.get(p)?.exercises ?? []))
+    // 今日を組むときに最初から入る種目（軸 + 前回の種目）で見どころを出す
+    const all = await listExercises(true)
+    const outlook = await planOutlook(parts.flatMap((p) => seedExercises(anchorOf(p, all), recent.get(p)?.exercises ?? [])))
     return { last, today: null, parts, count: 0, recorded: 0, ...outlook }
   })
 
@@ -68,7 +71,22 @@ export default function Home() {
     }
   })
   const measureDue = body?.due
-  const [snoozed, setSnoozed] = useState(() => readSnooze() === localDate())
+  const [snoozed, setSnoozed] = useState(() => readStored(SNOOZE_KEY) === localDate())
+
+  // 月のふりかえりの案内: 月の初めの1週間、前の月に記録があれば（見るか × で、その月の分は出さない）
+  const reviewMonth = useLiveQuery(async () => {
+    const today = localDate()
+    if (Number(today.slice(8)) > REVIEW_DAYS) return null
+    const prev = addMonths(today.slice(0, 7), -1)
+    return (await listSessions()).some((s) => s.date.startsWith(prev)) ? prev : null
+  })
+  const [reviewSeen, setReviewSeen] = useState(() => readStored(REVIEW_KEY))
+  const showReview = !!reviewMonth && reviewSeen !== reviewMonth && !(measureDue && !snoozed)
+  const closeReview = () => {
+    if (!reviewMonth) return
+    writeStored(REVIEW_KEY, reviewMonth)
+    setReviewSeen(reviewMonth)
+  }
 
   // 初回（記録が1つもなく、チュートリアル未完了）はチュートリアルへ
   if (plan && !plan.today && plan.last.size === 0 && !isOnboarded()) return <Navigate to="/welcome" replace />
@@ -118,12 +136,30 @@ export default function Home() {
           </button>
           <button
             onClick={() => {
-              writeSnooze(localDate())
+              writeStored(SNOOZE_KEY, localDate())
               setSnoozed(true)
             }}
             aria-label="今日は表示しない"
             className="flex h-12 w-11 shrink-0 items-center justify-center text-faint"
           >
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+      )}
+
+      {showReview && (
+        <div className="mx-5 mt-1 flex h-14 shrink-0 items-center rounded-2xl bg-panel pl-4">
+          <span className="min-w-0 flex-1 truncate text-sm">{Number(reviewMonth.slice(5))}月のふりかえり</span>
+          <button
+            onClick={() => {
+              closeReview()
+              nav(`/history?month=${reviewMonth}`)
+            }}
+            className="h-10 shrink-0 rounded-full bg-fg px-4 text-sm text-bg"
+          >
+            見る
+          </button>
+          <button onClick={closeReview} aria-label="表示しない" className="flex h-12 w-11 shrink-0 items-center justify-center text-faint">
             <Icon name="close" size={16} />
           </button>
         </div>
@@ -363,16 +399,21 @@ function outlook(weightUps: number): string {
 
 // 計測のお知らせを「今日は表示しない」にした日
 const SNOOZE_KEY = 'measure-snooze'
-function readSnooze() {
+// ふりかえりの案内を見た（閉じた）月。その月の分は出さない
+const REVIEW_KEY = 'review-seen'
+// ふりかえりの案内を出す、月の初めの日数
+const REVIEW_DAYS = 7
+
+function readStored(key: string) {
   try {
-    return localStorage.getItem(SNOOZE_KEY)
+    return localStorage.getItem(key)
   } catch {
     return null
   }
 }
-function writeSnooze(date: string) {
+function writeStored(key: string, value: string) {
   try {
-    localStorage.setItem(SNOOZE_KEY, date)
+    localStorage.setItem(key, value)
   } catch {
     // 保存できなくても続行
   }

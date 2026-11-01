@@ -18,4 +18,12 @@ export function addMonths(ym: string, n: number): string {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`
 }
 
+/** YYYY-MM の範囲 [初日, 最終日] と日数。今月なら今日まで（ふりかえりの週平均を、まだ来ていない日で薄めない） */
+export function monthRange(ym: string, today: string): { from: string; to: string; days: number } {
+  const [y, m] = ym.split('-').map(Number)
+  const last = `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
+  const to = today.startsWith(ym) ? today : last
+  return { from: `${ym}-01`, to, days: Number(to.slice(8)) }
+}
+
 export const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']

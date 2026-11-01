@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { db } from '../data/db'
 import { getSettings, listExercises, listMeasurements, listSessions, localDate, remove, sessionExercises, sessionProgress, setsOf } from '../data/repo'
 import { addMonths, monthGrid, WEEKDAYS } from '../lib/calendar'
@@ -10,6 +10,8 @@ import { partsOf } from '../lib/plan'
 import { BODY_PART_LABEL, partsName, type BodyPart } from '../lib/types'
 import { TopBar } from '../ui/TopBar'
 import { Icon } from '../ui/Icon'
+import { GrowthSection } from './Growth'
+import { MonthReview, type MonthTotals } from './MonthReview'
 
 // 3D（three.js とモデル）は履歴を開いたときだけ読み込む
 const Figure3D = lazy(() => import('../ui/Figure3D'))
@@ -72,7 +74,10 @@ interface Row {
 
 export default function History() {
   const today = localDate()
-  const [month, setMonth] = useState(today.slice(0, 7))
+  // ?month=YYYY-MM はホームの「ふりかえり」の案内から。その月を開いてまとめまでスクロールする
+  const [params] = useSearchParams()
+  const asked = params.get('month')
+  const [month, setMonth] = useState(asked && /^\d{4}-\d{2}$/.test(asked) && asked <= today.slice(0, 7) ? asked : today.slice(0, 7))
   const [selected, setSelected] = useState(today)
 
   const data = useLiveQuery(async () => {
@@ -108,6 +113,13 @@ export default function History() {
   const [y, m] = month.split('-').map(Number)
   const weeks = monthGrid(y, m)
   const daysDone = [...byDate.keys()].filter((d) => d.startsWith(month)).length
+  const inMonth = done.filter((r) => r.date.startsWith(month))
+  const monthTotals: MonthTotals = {
+    sessions: inMonth.length,
+    volume: inMonth.reduce((s, r) => s + r.total, 0),
+    compared: inMonth.reduce((s, r) => s + r.compared, 0),
+    improved: inMonth.reduce((s, r) => s + r.improved, 0),
+  }
   const picked = byDate.get(selected) ?? []
 
   return (
@@ -124,6 +136,8 @@ export default function History() {
             </span>
           </div>
         )}
+
+        {done.length > 0 && <GrowthSection />}
 
         {/* カレンダー: 白丸 = 全種目で前回超え、輪 = 記録あり、下線 = 計測した日 */}
         <div className="flex h-12 items-center">
@@ -221,6 +235,8 @@ export default function History() {
             ))
           )}
         </div>
+
+        {done.length > 0 && <MonthReview month={month} totals={monthTotals} scrollIntoView={params.has('month')} />}
       </main>
     </div>
   )

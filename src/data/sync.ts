@@ -84,6 +84,10 @@ function toRemote(table: SyncTable, row: Record<string, unknown>, uid: string) {
   const { updated_at: _u, ...rest } = row
   // upsert は欠けた列を NULL にするため明示する
   rest.deleted = !!rest.deleted
+  if (table === 'exercises') {
+    rest.anchor = !!rest.anchor
+    rest.movement = rest.movement ?? null
+  }
   if (table === 'settings') rest.id = uid
   return rest
 }

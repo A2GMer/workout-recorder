@@ -17,6 +17,37 @@ export const BODY_PARTS = Object.keys(BODY_PART_LABEL) as BodyPart[]
 
 export const partsName = (parts: BodyPart[]) => parts.map((p) => BODY_PART_LABEL[p]).join('・')
 
+/**
+ * 種目の「動き」。同じ動きなら器具や種目を替えても同じところに効くので、混んでいるときの代わりに出す。
+ * 並びはこの順（部位ごとに、よく使うものから）
+ */
+export const MOVEMENTS = {
+  chest_press: { part: 'chest', label: '押す' },
+  chest_incline: { part: 'chest', label: '斜め上に押す' },
+  chest_fly: { part: 'chest', label: '開く' },
+  back_vertical: { part: 'back', label: '上から引く' },
+  back_row: { part: 'back', label: '手前に引く' },
+  back_hinge: { part: 'back', label: '起こす' },
+  shoulder_press: { part: 'shoulders', label: '頭上に押す' },
+  shoulder_side: { part: 'shoulders', label: '横に上げる' },
+  shoulder_front: { part: 'shoulders', label: '前に上げる' },
+  shoulder_rear: { part: 'shoulders', label: '後ろに引く' },
+  shoulder_shrug: { part: 'shoulders', label: 'すくめる' },
+  arms_curl: { part: 'arms', label: '曲げる' },
+  arms_extension: { part: 'arms', label: '伸ばす' },
+  legs_squat: { part: 'legs', label: 'しゃがむ' },
+  legs_hinge: { part: 'legs', label: 'お尻・もも裏' },
+  legs_extension: { part: 'legs', label: 'ひざを伸ばす' },
+  legs_curl: { part: 'legs', label: 'ひざを曲げる' },
+  legs_calf: { part: 'legs', label: 'ふくらはぎ' },
+  core_crunch: { part: 'core', label: '丸める' },
+  core_leg_raise: { part: 'core', label: '脚を上げる' },
+} as const satisfies Record<string, { part: BodyPart; label: string }>
+
+export type Movement = keyof typeof MOVEMENTS
+
+export const movementsOf = (part: BodyPart) => (Object.keys(MOVEMENTS) as Movement[]).filter((m) => MOVEMENTS[m].part === part)
+
 /** 同期対象の行に共通するカラム */
 export interface Synced {
   id: string
@@ -34,6 +65,8 @@ export interface Settings extends Synced {
   height_cm: number | null
   /** 全身図の体型 */
   sex: Sex
+  /** 部位ごとの1週間（直近7日）のセット数の目安 */
+  weekly_sets: number
 }
 
 export interface Exercise extends Synced {
@@ -47,6 +80,10 @@ export interface Exercise extends Synced {
   backoff_ratio: number
   sort_order: number
   archived: boolean
+  /** 動き。未設定なら事前登録の同名の種目から引く（presets.ts movementOf） */
+  movement?: Movement | null
+  /** 軸の種目: その部位の伸びを測る種目（部位ごとに1つ）。今日を組むとき部位の先頭に入る */
+  anchor?: boolean
 }
 
 export interface Routine extends Synced {
